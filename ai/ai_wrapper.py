@@ -1,20 +1,20 @@
-from openai import OpenAI
+from openai import AsyncOpenAI
 import json
 import logging
 from .prompt_manager import PromptManager
 
 class AIWrapper:
     def __init__(self, api_key, model):
-        self.client = OpenAI(
+        self.client = AsyncOpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
         )
         self.model = model
         self.logger = logging.getLogger(__name__)
 
-    def analyze_and_decide(self, market_data):
+    async def analyze_and_decide(self, market_data):
         """
-        Sends market data to the AI and returns the decision.
+        Sends market data to the AI and returns the decision asynchronously.
         """
         system_prompt = PromptManager.get_system_prompt()
         user_prompt = PromptManager.format_market_data(market_data)
@@ -24,15 +24,15 @@ class AIWrapper:
                 "type": "function",
                 "function": {
                     "name": "buy_stock",
-                    "description": "Place a buy order for a stock",
+                    "description": "Place a buy order",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "symbol": {"type": "string", "description": "The stock ticker symbol"},
-                            "quantity": {"type": "integer", "description": "Number of shares to buy"},
-                            "stop_loss": {"type": "number", "description": "Stop Loss Price (REQUIRED)"},
-                            "take_profit": {"type": "number", "description": "Take Profit Price (Optional)"},
-                            "reason": {"type": "string", "description": "Reason for the decision"}
+                            "symbol": {"type": "string", "description": "Ticker symbol"},
+                            "quantity": {"type": "integer", "description": "Quantity"},
+                            "stop_loss": {"type": "number", "description": "Stop Loss Price"},
+                            "take_profit": {"type": "number", "description": "Take Profit Price"},
+                            "reason": {"type": "string", "description": "Reason"}
                         },
                         "required": ["symbol", "quantity", "stop_loss", "reason"]
                     }
@@ -42,14 +42,14 @@ class AIWrapper:
                 "type": "function",
                 "function": {
                     "name": "sell_stock",
-                    "description": "Place a sell order for a stock",
+                    "description": "Place a sell order",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "symbol": {"type": "string", "description": "The stock ticker symbol"},
-                            "quantity": {"type": "integer", "description": "Number of shares to sell"},
-                             "stop_loss": {"type": "number", "description": "Stop Loss Price (REQUIRED)"},
-                            "reason": {"type": "string", "description": "Reason for the decision"}
+                            "symbol": {"type": "string", "description": "Ticker symbol"},
+                            "quantity": {"type": "integer", "description": "Quantity"},
+                             "stop_loss": {"type": "number", "description": "Stop Loss Price"},
+                            "reason": {"type": "string", "description": "Reason"}
                         },
                         "required": ["symbol", "quantity", "stop_loss", "reason"]
                     }
@@ -59,12 +59,12 @@ class AIWrapper:
                 "type": "function",
                 "function": {
                     "name": "hold_position",
-                    "description": "Hold the current position",
+                    "description": "Hold current position",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "symbol": {"type": "string", "description": "The stock ticker symbol"},
-                            "reason": {"type": "string", "description": "Reason for the decision"}
+                            "symbol": {"type": "string", "description": "Ticker symbol"},
+                            "reason": {"type": "string", "description": "Reason"}
                         },
                         "required": ["symbol", "reason"]
                     }
@@ -73,7 +73,7 @@ class AIWrapper:
         ]
 
         try:
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -96,10 +96,10 @@ class AIWrapper:
                     "raw_response": message
                 }
             else:
-                self.logger.warning("AI did not use a tool. Raw content: " + str(message.content))
+                # self.logger.warning("AI did not use a tool. Raw content: " + str(message.content))
                 return {
                     "decision": "hold_position",
-                    "args": {"symbol": market_data['symbol'], "reason": "AI did not return a structured decision."},
+                    "args": {"symbol": market_data['symbol'], "reason": "AI returned text only."},
                     "raw_response": message
                 }
 

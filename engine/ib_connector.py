@@ -45,31 +45,27 @@ class IBKRConnector(BaseConnector):
             self.logger.error(f"Could not qualify contract for {symbol}: {e}")
             return None
 
-        # 1. Snapshot
-        ticker = self.ib.reqMktData(contract, '', False, False)
-        for _ in range(50):
-            if ticker.last or ticker.bid or ticker.ask:
-                break
-            await asyncio.sleep(0.1)
+        # OPTIMIZATION: Reduce duration from 10 D to 2 D (48 bars).
+        # Enough for SMA 20, but not SMA 50 or 200.
+        # Wait, if we want SMA 50/200, we need history.
+        # Let's check `Indicators.py`. It calculates SMA 20, 50, 200.
+        # If we optimize speed, we might sacrifice long-term SMA accuracy or fetch it once.
+        # For "Efficient" optimization request, let's assume accuracy > pure speed, but parallel fetch helps.
+        # IBKR reqMktData is streaming/subscription based usually, but here we use snapshot.
+        # We can run reqMktData and reqHistoricalDataAsync in parallel tasks.
 
-        snapshot = {
-            'symbol': symbol,
-            'timestamp': datetime.now(),
-            'last': ticker.last if ticker.last else ticker.close, # Fallback to close if last missing
-            'bid': ticker.bid,
-            'ask': ticker.ask,
-            'volume': ticker.volume,
-            'close': ticker.close
-        }
+        # Task 1: Snapshot
+        async def get_snapshot():
+            ticker = self.ib.reqMktData(contract, '', False, False)
+            for _ in range(20): # Reduce wait loops
+                if ticker.last or ticker.bid or ticker.ask:
+                    break
+                await asyncio.sleep(0.05)
+            return ticker
 
-        # If still no price, fail
-        if not snapshot['last']:
-             self.logger.warning(f"No market data received for {symbol}")
-             return None
-
-        # 2. Historical Data for Indicators
-        try:
-            bars = await self.ib.reqHistoricalDataAsync(
+        # Task 2: History (Keep 10 D for full indicator support, but parallelize)
+        async def get_history():
+            return await self.ib.reqHistoricalDataAsync(
                 contract,
                 endDateTime='',
                 durationStr='10 D',
@@ -77,14 +73,27 @@ class IBKRConnector(BaseConnector):
                 whatToShow='TRADES',
                 useRTH=True
             )
-            if bars:
-                df = util.df(bars)
-                technicals = Indicators.get_technical_summary(df)
-            else:
-                technicals = {}
-        except Exception as e:
-            self.logger.error(f"Historical data error for {symbol}: {e}")
-            technicals = {}
+
+        ticker, bars = await asyncio.gather(get_snapshot(), get_history())
+
+        snapshot = {
+            'symbol': symbol,
+            'timestamp': datetime.now(),
+            'last': ticker.last if ticker.last else ticker.close,
+            'bid': ticker.bid,
+            'ask': ticker.ask,
+            'volume': ticker.volume,
+            'close': ticker.close
+        }
+
+        if not snapshot['last']:
+             self.logger.warning(f"No market data received for {symbol}")
+             return None
+
+        technicals = {}
+        if bars:
+            df = util.df(bars)
+            technicals = Indicators.get_technical_summary(df)
 
         return {**snapshot, **technicals}
 
@@ -103,7 +112,6 @@ class IBKRConnector(BaseConnector):
 
         orders_to_place = [parent]
 
-        # Bracket Logic (Simple implementation for BUY)
         if (stop_loss or take_profit) and action == 'BUY':
             parent.transmit = False
             if stop_loss:
@@ -122,13 +130,6 @@ class IBKRConnector(BaseConnector):
             t = self.ib.placeOrder(contract, o)
             trades.append(t)
 
-        # Return a simplified dict or specific object. For now returning the IB Trade object wrapper or similar.
-        # But BaseConnector should return a generic structure ideally.
-        # For MVP, let's return a simple object wrapper to decouple `main` from `ib_insync` types?
-        # Actually `main.py` accesses `trade.order.orderId`.
-        # Let's return a Mock-like object or the raw trade if we assume main knows IB?
-        # To be purely generic, we should return a generic TradeResult.
-        # But let's return the raw object for now and update Main later if needed.
         return trades[0]
 
     async def get_account_summary(self):

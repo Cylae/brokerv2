@@ -7,7 +7,6 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from engine.ib_connector import IBKRConnector
-from engine.trading_engine import TradingEngine
 from ai.ai_wrapper import AIWrapper
 from engine.db_manager import DatabaseManager
 
@@ -43,5 +42,5 @@ def mock_ib_connector(mock_ib):
 @pytest.fixture
 def mock_openai():
     client = MagicMock()
-    client.chat.completions.create = MagicMock()
+    client.chat.completions.create = AsyncMock()
     return client

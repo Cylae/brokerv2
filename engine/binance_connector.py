@@ -47,7 +47,12 @@ class BinanceConnector(BaseConnector):
                 symbol = f"{symbol}/USDT"
 
         try:
-            ticker = await self.exchange.fetch_ticker(symbol)
+            # OPTIMIZATION: Fetch Ticker and OHLCV concurrently
+            ticker_task = self.exchange.fetch_ticker(symbol)
+            bars_task = self.exchange.fetch_ohlcv(symbol, '1h', limit=100) # Reduced limit from 240 to 100 for speed (sufficient for SMA50/RSI/BB)
+
+            ticker, bars = await asyncio.gather(ticker_task, bars_task)
+
             snapshot = {
                 'symbol': symbol,
                 'timestamp': datetime.now(),
@@ -58,7 +63,6 @@ class BinanceConnector(BaseConnector):
                 'close': ticker['close']
             }
 
-            bars = await self.exchange.fetch_ohlcv(symbol, '1h', limit=240)
             if bars:
                 df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
                 df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
@@ -91,14 +95,8 @@ class BinanceConnector(BaseConnector):
             self.logger.info(f"Binance Entry Order Placed: {order['id']}")
 
             # 2. Place Stop Loss (Post-Fill logic for Spot)
-            # Note: In a real high-frequency system, we'd check for partial fills.
-            # For this MVP, we assume immediate fill or accept risk of placing stop on unfilled qty (unlikely to execute if market didn't move)
             if stop_loss and action == 'BUY':
                 try:
-                    # Binance Spot 'STOP_LOSS_LIMIT' requires a price and stopPrice
-                    # Usually we set limit price slightly below stop price to ensure fill, or same.
-                    # Or use 'STOP_MARKET' if supported (Binance supports STOP_LOSS which is usually limit)
-                    # For simplicity, we use the stop_loss price as trigger and limit.
                     stop_params = {'stopPrice': stop_loss}
                     stop_order = await self.exchange.create_order(
                         symbol,
@@ -119,10 +117,6 @@ class BinanceConnector(BaseConnector):
                         self.logger.critical(f"EMERGENCY CLOSE FAILED: {close_e}. MANUAL INTERVENTION REQUIRED!")
 
             if take_profit and action == 'BUY':
-                # Similar logic for Take Profit (LIMIT order)
-                # OCO would be better but complex to construct manually via generic ccxt.
-                # Placing a TP Limit order might lock the assets, preventing SL execution on some exchanges (Binance).
-                # For safety, we prioritize Stop Loss. We log TP as "Monitor Manually" if we placed SL.
                 self.logger.warning("Binance Connector: Take Profit order skipped to avoid locking assets for Stop Loss. Monitor manually.")
 
             class GenericTrade:

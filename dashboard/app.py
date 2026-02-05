@@ -10,7 +10,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from engine.ib_connector import IBKRConnector
 from engine.binance_connector import BinanceConnector
-from engine.trading_engine import TradingEngine
 from ai.ai_wrapper import AIWrapper
 from config import Config
 
@@ -42,7 +41,6 @@ if trading_mode == "IBKR (Stocks)":
     if st.button("Connect to IBKR"):
         try:
             connector = IBKRConnector(host=ib_host, port=ib_port, client_id=client_id)
-            # IB Connection logic...
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             loop.run_until_complete(connector.connect())
@@ -61,7 +59,6 @@ else: # Binance
     if st.button("Connect to Binance"):
         try:
             connector = BinanceConnector(api_key=bin_key, secret_key=bin_secret, testnet=testnet)
-            # Binance Connection logic...
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             loop.run_until_complete(connector.connect())
@@ -73,8 +70,6 @@ else: # Binance
 
 if 'connector' not in st.session_state:
     st.session_state.connector = None
-if 'trading_engine' not in st.session_state:
-    st.session_state.trading_engine = None
 if 'logs' not in st.session_state:
     st.session_state.logs = []
 
@@ -84,24 +79,24 @@ def log(message):
 
 # Main Logic
 if st.session_state.connector:
-    if st.session_state.connector.connected: # Simple check
-        st.session_state.trading_engine = TradingEngine(st.session_state.connector)
+    if st.session_state.connector.connected:
+        # Use connector directly as engine
+        engine = st.session_state.connector
 
         # Disconnect Button
         if st.sidebar.button("Disconnect"):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(st.session_state.connector.disconnect())
+            loop.run_until_complete(engine.disconnect())
             st.session_state.connector = None
-            st.session_state.trading_engine = None
-            st.experimental_rerun()
+            st.rerun()
 
     else:
         st.warning("Connector initialized but not connected.")
 
 # Dashboard View
-if st.session_state.trading_engine:
-    engine = st.session_state.trading_engine
+if st.session_state.connector and st.session_state.connector.connected:
+    engine = st.session_state.connector
 
     # Account Summary
     st.header("2. Account Summary")
@@ -157,7 +152,7 @@ if st.session_state.trading_engine:
 
                         ai = AIWrapper(api_key, model)
                         with st.spinner("AI Thinking..."):
-                            decision = ai.analyze_and_decide(market_data)
+                            decision = loop.run_until_complete(ai.analyze_and_decide(market_data))
 
                         if decision:
                             st.subheader("AI Decision")

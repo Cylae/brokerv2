@@ -1,70 +1,74 @@
-# Autonomous Multi-Model AI Trading System
+# 🤖 Autonomous Multi-Model AI Trading System
 
-A Python-based trading architecture that connects to Interactive Brokers (IBKR) via a Gateway, uses OpenRouter to access various LLMs (Grok, GPT-4, Claude, Mistral), and executes trades based on AI analysis.
+Welcome! This is a system that uses Artificial Intelligence (like GPT-4 or Mistral) to analyze the stock market and make trading decisions automatically.
 
-## Prerequisites
+It was designed to be easy to set up and use, even if you are new to coding.
 
-*   **Python 3.9+**
-*   **Interactive Brokers Account** (Paper Trading recommended)
-*   **IB Gateway or TWS** installed and running.
-*   **OpenRouter API Key**
+## 🚀 Quick Start (4 Steps)
 
-## Setup
+### 1. Install Prerequisites
+You need two things installed on your computer:
+*   **Python:** [Download Python here](https://www.python.org/downloads/). (Make sure to check "Add Python to PATH" during installation).
+*   **Interactive Brokers TWS or Gateway:** [Download TWS here](https://www.interactivebrokers.com/en/trading/tws.php). You need an account (a **Paper Trading** account is best for testing).
 
-1.  **Clone the repository:**
-    ```bash
-    git clone <repo_url>
-    cd trading_system
-    ```
+### 2. Setup the Code
+Open your terminal (Command Prompt or Terminal) and run these commands:
 
-2.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3.  **Configure Environment:**
-    Create a `.env` file or export environment variables:
-    ```bash
-    export IB_ACCOUNT="DU12345"       # Your IBKR Account ID
-    export IB_HOST="127.0.0.1"        # IB Gateway Host
-    export IB_PORT="7497"             # 7497 for Paper, 7496 for Live
-    export IB_CLIENT_ID="1"
-    export OPENROUTER_KEY="sk-..."    # Your OpenRouter API Key
-    export OPENROUTER_MODEL="mistralai/mistral-7b-instruct"
-    ```
-
-4.  **IB Gateway / TWS Settings:**
-    *   Enable **ActiveX and Socket Clients**.
-    *   Disable **Read-Only API** (if you want to execute trades).
-    *   Ensure the port matches `IB_PORT` (default 7497 for paper).
-
-## Usage
-
-### Dashboard Mode (Streamlit)
-To launch the interactive dashboard:
 ```bash
-streamlit run dashboard/app.py
+# Install the necessary libraries
+pip install -r requirements.txt
 ```
 
-### Autonomous Mode (CLI)
-To run the system in a loop:
+### 3. Configure Your Keys
+1.  Find the file named `.env.example`.
+2.  Rename it to `.env`.
+3.  Open `.env` in a text editor (Notepad, TextEdit, VS Code).
+4.  **Important:** You need an **OpenRouter API Key** (allows the AI to "talk"). Get one here: [https://openrouter.ai/keys](https://openrouter.ai/keys).
+5.  Paste your key into the `.env` file where it says `OPENROUTER_KEY=...`.
+6.  Ensure your **IB Account ID** matches what is shown in your TWS/Gateway software.
+
+### 4. Run It!
+We made a simple launcher for you. Just run:
+
 ```bash
-python main.py --loop --symbols AAPL TSLA NVDA
+python easy_start.py
 ```
 
-## Architecture
+You will see a menu:
+*   **Option 1 (Dashboard):** Opens a web page where you can see charts and manually ask the AI for advice.
+*   **Option 2 (Auto-Trader):** Runs in the background, constantly checking stocks and trading on its own.
 
-*   **Engine:** `ib_insync` based connector for IBKR.
-*   **AI:** OpenRouter wrapper supporting Tool Use/Function Calling.
-*   **Dashboard:** Streamlit interface for real-time monitoring.
+---
 
-## ⚠️ Security & Risk Warning
+## 📚 Beginner's Guide
 
-*   **Real Money Trading:** This software is for **educational purposes only**. Trading stocks, options, and cryptocurrencies involves significant risk and can result in the loss of your capital.
-*   **Paper Trading:** Always use a **Paper Trading (Simulated)** account for testing. Do not run this with real money unless you fully understand the code and risks.
-*   **API Keys:** Never share your API keys or commit them to version control.
-*   **Hallucinations:** AI models can "hallucinate" or make mistakes. Do not rely solely on AI for financial decisions.
+### What is "Paper Trading"?
+**Paper Trading** means trading with fake money. Interactive Brokers gives you a simulated account (usually starting with `DU...`).
+**ALWAYS** use this mode first. Do not use your real money account until you are 100% sure you know what you are doing. The AI can make mistakes!
 
-## License
+### What is "TWS" or "IB Gateway"?
+To trade with Interactive Brokers, you need their software running on your computer.
+*   **TWS (Trader Workstation):** The full trading interface. Good for watching the market.
+*   **IB Gateway:** A lightweight version just for connecting software like this.
+*   **Note:** You must enable **"ActiveX and Socket Clients"** in the API Settings of TWS/Gateway for this program to connect.
+    *   Go to: `File -> Global Configuration -> API -> Settings`.
+    *   Check "Enable ActiveX and Socket Clients".
+    *   Uncheck "Read-Only API".
 
-MIT
+### How does the AI work?
+1.  **Fetch:** The system pulls the latest price and volume data for a stock (e.g., Apple).
+2.  **Think:** It sends this data to the AI (e.g., Mistral or GPT-4).
+3.  **Decide:** The AI looks at the numbers and decides to **BUY**, **SELL**, or **HOLD**.
+4.  **Act:** If the AI says BUY, the system sends an order to your broker automatically.
+
+---
+
+## 🛠 Troubleshooting
+
+*   **"Connection failed"**: Make sure TWS/Gateway is running and the port in your `.env` file (usually 7497) matches the port in TWS API Settings.
+*   **"OPENROUTER_KEY missing"**: You didn't save your `.env` file correctly, or you didn't paste the key.
+*   **"Module not found"**: You forgot to run `pip install -r requirements.txt`.
+
+## ⚠️ Disclaimer
+**This software is for educational purposes only.**
+Trading involves risk. The AI can hallucinate (make up facts). Never trade money you cannot afford to lose.

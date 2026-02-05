@@ -47,26 +47,6 @@ with col1:
     if st.button("Connect to IBKR"):
         try:
             connector = IBConnector(host=ib_host, port=ib_port, client_id=client_id)
-            # We need to run connect in a loop, but Streamlit is weird with asyncio.
-            # For ib_insync in streamlit, it's best to use `ib.connect()` (blocking) instead of async if possible,
-            # or manage the loop carefully. IBConnector uses `connectAsync`.
-            # Let's try blocking connect for simplicity or wrap in run_async.
-
-            # Since IBConnector uses connectAsync, we wrap it.
-            # But wait, ib_insync `IB` object needs a live event loop for some operations.
-            # Using `util.startLoop()` might be needed.
-            from ib_insync import util
-            # util.startLoop() # This might conflict with Streamlit's loop if any.
-
-            # Simplified approach: Create a new loop for each action is bad for subscriptions.
-            # Ideally we want a persistent connection.
-            # For this MVP, let's assume we re-connect or check connection.
-
-            # Actually, `ib_insync` can be used synchronously if we use `ib.connect()` instead of `connectAsync`.
-            # Let's modify IBConnector usage or just call underlying sync methods if needed.
-            # But my IBConnector is async.
-
-            # Let's use `asyncio.new_event_loop().run_until_complete(...)` pattern carefully.
 
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -100,15 +80,6 @@ if st.session_state.trading_engine:
     # Account Summary
     st.header("2. Account Summary")
     if st.button("Refresh Account"):
-        # We need to run async command on the loop used by IB
-        # This is tricky in Streamlit.
-        # ib_insync.IB instance is attached to a loop.
-        # If that loop is closed or we are in a different thread, it fails.
-
-        # A workaround for Streamlit + ib_insync:
-        # Re-use the loop or use `ib.run(coroutine)` if `ib` manages the loop.
-        # `ib.run()` is a helper to run a coroutine.
-
         try:
             summary = engine.ib.run(engine.get_account_summary())
             st.json(summary)
@@ -133,19 +104,37 @@ if st.session_state.trading_engine:
             log(f"Starting analysis for {symbol}...")
             with st.spinner("Fetching Market Data..."):
                 try:
+                    # Fetch rich market data (Snapshot + Historical)
                     market_data = engine.ib.run(engine.get_market_data(symbol))
+
                     if market_data:
-                        st.subheader("Market Data")
+                        # Display Data & Indicators
+                        st.subheader(f"Market Data & Technicals: {symbol}")
+
+                        col_price, col_tech = st.columns(2)
+                        with col_price:
+                            st.metric("Last Price", market_data.get('last'))
+                            st.metric("Volume", market_data.get('volume'))
+
+                        with col_tech:
+                            st.write("**Indicators**")
+                            st.write(f"SMA 20: {market_data.get('SMA_20', 'N/A')}")
+                            st.write(f"SMA 50: {market_data.get('SMA_50', 'N/A')}")
+                            st.write(f"RSI: {market_data.get('RSI', 'N/A')}")
+                            st.write(f"MACD: {market_data.get('MACD', 'N/A')}")
+                            st.write(f"Bollinger: {market_data.get('BB_Upper', 'N/A')} / {market_data.get('BB_Lower', 'N/A')}")
+
                         st.json(market_data)
 
                         ai = AIWrapper(api_key, model)
-                        with st.spinner("AI Thinking..."):
+                        with st.spinner("AI Thinking (Technical Analysis)..."):
                             decision = ai.analyze_and_decide(market_data)
 
                         if decision:
                             st.subheader("AI Decision")
                             st.write(f"**Action:** {decision['decision']}")
-                            st.write(f"**Arguments:** {decision['args']}")
+                            st.write(f"**Reason:** {decision['args'].get('reason', 'No reason provided')}")
+                            st.write(f"**Quantity:** {decision['args'].get('quantity', 'N/A')}")
 
                             log(f"AI Decision for {symbol}: {decision['decision']}")
 

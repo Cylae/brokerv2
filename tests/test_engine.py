@@ -25,6 +25,10 @@ async def test_trading_engine_get_market_data(mock_ib_connector, mock_ib):
 
     mock_ib.reqMktData.return_value = ticker
 
+    # Mock Historical Data (return empty list or None for simplicity in basic test)
+    # The code expects `bars` to be truthy to compute indicators.
+    mock_ib.reqHistoricalDataAsync = AsyncMock(return_value=[])
+
     data = await engine.get_market_data('AAPL')
 
     assert data is not None
@@ -32,6 +36,7 @@ async def test_trading_engine_get_market_data(mock_ib_connector, mock_ib):
     assert data['last'] == 150.0
     mock_ib.qualifyContractsAsync.assert_called_once()
     mock_ib.reqMktData.assert_called_once()
+    mock_ib.reqHistoricalDataAsync.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_trading_engine_execute_order(mock_ib_connector, mock_ib):

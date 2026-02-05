@@ -1,8 +1,9 @@
-from ib_insync import Stock, MarketOrder, LimitOrder
+from ib_insync import Stock, MarketOrder, LimitOrder, util
 import logging
 import asyncio
 import pandas as pd
 from datetime import datetime
+from .indicators import Indicators
 
 class TradingEngine:
     def __init__(self, ib_connector):
@@ -11,7 +12,7 @@ class TradingEngine:
         self.logger = logging.getLogger(__name__)
 
     async def get_market_data(self, symbol, exchange='SMART', currency='USD'):
-        """Fetches a snapshot of market data for a given symbol."""
+        """Fetches a snapshot AND historical market data for a given symbol."""
         contract = Stock(symbol, exchange, currency)
 
         # Qualify the contract to ensure it exists and get details
@@ -21,7 +22,7 @@ class TradingEngine:
             self.logger.error(f"Could not qualify contract for {symbol}: {e}")
             return None
 
-        # Request market data
+        # 1. Request Snapshot
         ticker = self.ib.reqMktData(contract, '', False, False)
 
         # Wait for data to populate (simple retry mechanism)
@@ -30,11 +31,7 @@ class TradingEngine:
                 break
             await asyncio.sleep(0.1)
 
-        if not (ticker.last or ticker.bid or ticker.ask):
-             self.logger.warning(f"No market data received for {symbol}")
-             # We might still return what we have, or None
-
-        data = {
+        snapshot = {
             'symbol': symbol,
             'timestamp': datetime.now(),
             'last': ticker.last,
@@ -43,7 +40,32 @@ class TradingEngine:
             'volume': ticker.volume,
             'close': ticker.close
         }
-        return data
+
+        # 2. Request Historical Data (e.g., 2 days of 1-hour bars)
+        # Note: 'TRADES' is usually better for stocks, but 'MIDPOINT' might be safer for forex.
+        try:
+            bars = await self.ib.reqHistoricalDataAsync(
+                contract,
+                endDateTime='',
+                durationStr='10 D',
+                barSizeSetting='1 hour',
+                whatToShow='TRADES',
+                useRTH=True
+            )
+
+            if bars:
+                df = util.df(bars)
+                technicals = Indicators.get_technical_summary(df)
+            else:
+                self.logger.warning(f"No historical data received for {symbol}")
+                technicals = {}
+
+        except Exception as e:
+             self.logger.error(f"Failed to fetch historical data for {symbol}: {e}")
+             technicals = {}
+
+        # Merge Data
+        return {**snapshot, **technicals}
 
     async def execute_order(self, symbol, action, quantity, order_type='MKT', price=None):
         """Executes an order."""
@@ -65,12 +87,8 @@ class TradingEngine:
 
     async def get_account_summary(self):
         """Returns account summary."""
-        # Using accountSummary or accountValues
-        # For simplicity, let's use accountValues for now or wrapper's accountSummary
-        # ib_insync makes it easy with managed accounts
         tags = 'NetLiquidation,TotalCashValue,GrossPositionValue'
         summary = await self.ib.accountSummaryAsync()
-        # Filter for our account if necessary, but typically returns list of AccountValue
         data = {}
         for item in summary:
              if item.tag in tags.split(','):

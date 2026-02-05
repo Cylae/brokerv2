@@ -9,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from engine.ib_connector import IBKRConnector
 from engine.ccxt_connector import CCXTConnector
+from engine.async_utils import get_or_create_event_loop
 from ai.ai_wrapper import AIWrapper
 from config import Config
 
@@ -85,8 +86,7 @@ if trading_mode == "Unified Portfolio":
             if Config and Config.IB_HOST:
                 try:
                     ib = IBKRConnector(Config.IB_HOST, Config.IB_PORT, Config.IB_CLIENT_ID)
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
+                    loop = get_or_create_event_loop()
                     loop.run_until_complete(ib.connect())
                     summary = loop.run_until_complete(ib.get_account_summary())
                     positions = loop.run_until_complete(ib.get_positions())
@@ -110,8 +110,7 @@ if trading_mode == "Unified Portfolio":
                         exchange_id=Config.CRYPTO_EXCHANGE,
                         testnet=Config.BINANCE_TESTNET
                     )
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
+                    loop = get_or_create_event_loop()
                     loop.run_until_complete(ccxt.connect())
                     summary = loop.run_until_complete(ccxt.get_account_summary())
                     positions = loop.run_until_complete(ccxt.get_positions())
@@ -148,8 +147,7 @@ else:
         if st.button("Connect to IBKR"):
             try:
                 connector = IBKRConnector(host=ib_host, port=ib_port, client_id=client_id)
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+                loop = get_or_create_event_loop()
                 loop.run_until_complete(connector.connect())
                 st.session_state.connector = connector
                 st.session_state.mode = 'IBKR'
@@ -172,8 +170,7 @@ else:
         if st.button("Connect to Exchange"):
             try:
                 connector = CCXTConnector(api_key=bin_key, secret_key=bin_secret, exchange_id=exchange_id, testnet=testnet)
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+                loop = get_or_create_event_loop()
                 loop.run_until_complete(connector.connect())
                 st.session_state.connector = connector
                 st.session_state.mode = 'CRYPTO'
@@ -184,8 +181,7 @@ else:
     # Disconnect Logic
     if st.session_state.connector and st.session_state.connector.connected:
         if st.sidebar.button("Disconnect"):
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            loop = get_or_create_event_loop()
             loop.run_until_complete(st.session_state.connector.disconnect())
             st.session_state.connector = None
             st.rerun()
@@ -197,8 +193,7 @@ else:
         st.header("2. Portfolio")
         if st.button("Refresh Account"):
             try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+                loop = get_or_create_event_loop()
 
                 summary = loop.run_until_complete(engine.get_account_summary())
 
@@ -231,8 +226,7 @@ else:
             log(f"Starting analysis for {symbol}...")
             with st.spinner("Fetching Market Data..."):
                 try:
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
+                    loop = get_or_create_event_loop()
 
                     market_data = loop.run_until_complete(engine.get_market_data(symbol))
 

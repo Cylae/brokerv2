@@ -61,6 +61,12 @@ When the bot buys a stock, it sends a **Bracket Order**. This means it sends 3 o
 2.  **Stop Loss:** "Sell if price drops to $X" (Protects you from crashing).
 3.  **Take Profit:** "Sell if price rises to $Y" (Locks in your gains).
 
+### 4. "Real Use" Viability
+*   **Database Logging:** All trades are saved to a local database (`trading_history.db`) so you never lose your history.
+*   **Market Hours:** The bot sleeps automatically when the US Market is closed (Nights/Weekends).
+*   **Notifications:** (Optional) Add `DISCORD_WEBHOOK_URL` to your `.env` to get alerts on your phone whenever a trade happens.
+*   **Auto-Reconnect:** The system automatically reconnects if the internet drops or IBKR restarts.
+
 ---
 
 ## 📚 Beginner's Guide

@@ -7,6 +7,9 @@ import os
 from engine.ib_connector import IBConnector
 from engine.trading_engine import TradingEngine
 from engine.risk_manager import RiskManager
+from engine.db_manager import DatabaseManager
+from engine.market_utils import MarketSchedule
+from engine.notifier import Notifier
 from ai.ai_wrapper import AIWrapper
 from config import Config
 
@@ -21,7 +24,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def run_trading_cycle(engine, risk_manager, ai, symbols):
+async def run_trading_cycle(engine, risk_manager, ai, db, notifier, symbols):
+    # Check Market Hours
+    if not MarketSchedule.is_market_open():
+        logger.info("Market is CLOSED. Skipping analysis.")
+        return
+
     for symbol in symbols:
         logger.info(f"--- Analyzing {symbol} ---")
         market_data = await engine.get_market_data(symbol)
@@ -51,28 +59,38 @@ async def run_trading_cycle(engine, risk_manager, ai, symbols):
                     price = market_data['last']
                     stop_loss = args.get('stop_loss')
                     take_profit = args.get('take_profit')
+                    quantity = args['quantity']
+                    reason = args.get('reason', 'No reason')
 
-                    valid, reason = await risk_manager.validate_trade(
-                        symbol, args['quantity'], price, 'BUY', stop_loss
+                    valid, validation_msg = await risk_manager.validate_trade(
+                        symbol, quantity, price, 'BUY', stop_loss
                     )
 
                     if not valid:
-                        logger.warning(f"Risk Manager Rejected Trade: {reason}")
+                        logger.warning(f"Risk Manager Rejected Trade: {validation_msg}")
                         continue
 
-                    await engine.execute_order(
-                        args['symbol'], 'BUY', args['quantity'], 'MKT',
+                    trade = await engine.execute_order(
+                        args['symbol'], 'BUY', quantity, 'MKT',
                         stop_loss=stop_loss, take_profit=take_profit
                     )
+
+                    # Get Order ID (Note: Trade object might not have orderId immediately populated in some contexts, but usually yes)
+                    order_id = trade.order.orderId
+
+                    # Log to DB
+                    db.log_trade(symbol, 'BUY', quantity, price, stop_loss, take_profit, reason, order_id)
+
+                    # Notify
+                    notifier.send_trade_alert(symbol, 'BUY', quantity, price, stop_loss, reason)
 
                 elif cmd == 'sell_stock':
                     if args['symbol'].upper() != symbol.upper():
                         logger.warning(f"AI tried to sell {args['symbol']} but we are analyzing {symbol}. Ignoring mismatch.")
                         continue
 
-                    # Risk Check (Assuming Short Selling logic similar to buy for position size)
-                    # For MVP, focusing on long trades primarily, but keeping structure.
-                    await engine.execute_order(args['symbol'], 'SELL', args['quantity'], 'MKT')
+                    # TODO: Implement full sell logic/short logic
+                    await engine.execute_order(args['symbol'], 'SELL', args['quantity'], 'MKT', stop_loss=args.get('stop_loss'))
 
                 elif cmd == 'hold_position':
                     logger.info("Holding position.")
@@ -98,32 +116,46 @@ async def main():
     # Initialize Components
     connector = IBConnector(host=Config.IB_HOST, port=Config.IB_PORT, client_id=Config.IB_CLIENT_ID)
     ai = AIWrapper(api_key=Config.OPENROUTER_API_KEY, model=Config.OPENROUTER_MODEL)
+    db = DatabaseManager()
+    notifier = Notifier()
 
-    try:
-        await connector.connect()
-        engine = TradingEngine(connector)
+    # Connection Loop with Backoff
+    while True:
+        try:
+            logger.info("Connecting to IBKR...")
+            await connector.connect()
+            engine = TradingEngine(connector)
 
-        # Helper to fetch account data for Risk Manager
-        async def account_provider():
-            return await engine.get_account_summary()
+            # Helper to fetch account data for Risk Manager
+            async def account_provider():
+                return await engine.get_account_summary()
 
-        risk_manager = RiskManager(account_provider)
+            risk_manager = RiskManager(account_provider)
 
-        if args.loop:
-            logger.info("Starting continuous trading loop...")
+            logger.info("System Initialized. Starting Trading Loop.")
+
             while True:
-                await run_trading_cycle(engine, risk_manager, ai, args.symbols)
+                if not await connector.check_connection():
+                    logger.error("Connection lost. Reconnecting...")
+                    break # Break inner loop to re-connect
+
+                await run_trading_cycle(engine, risk_manager, ai, db, notifier, args.symbols)
+
+                if not args.loop:
+                    return
+
                 logger.info("Sleeping for 60 seconds...")
                 await asyncio.sleep(60)
-        else:
-            await run_trading_cycle(engine, risk_manager, ai, args.symbols)
 
-    except KeyboardInterrupt:
-        logger.info("Stopping...")
-    except Exception as e:
-        logger.error(f"An error occurred: {e}")
-    finally:
-        connector.disconnect()
+        except KeyboardInterrupt:
+            logger.info("Stopping...")
+            break
+        except Exception as e:
+            logger.error(f"Critical Error: {e}")
+            logger.info("Restarting in 10 seconds...")
+            await asyncio.sleep(10)
+        finally:
+             connector.disconnect()
 
 if __name__ == "__main__":
     asyncio.run(main())

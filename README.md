@@ -21,6 +21,73 @@ The ultimate "Senior Quantitative Architect" grade trading system. It combines P
 
 ---
 
+## 🎓 Zero-to-Hero Tutorial: Your First Trade
+
+Follow this guide to go from "Empty Folder" to "AI Trading" safely.
+
+### Step 1: Install & Setup
+1.  **Clone the Repo:** Download this code to your machine.
+2.  **Install Python:** Ensure you have Python 3.10+ installed.
+3.  **Install Libraries:**
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+### Step 2: Get Your Keys (Paper Trading ONLY!)
+*   **AI:** Go to [OpenRouter.ai](https://openrouter.ai), create an account, and generate an API Key.
+*   **Stocks (Optional):** Download [TWS (Trader Workstation)](https://www.interactivebrokers.com/en/trading/tws.php). Log in with your **Paper Trading** account.
+    *   Go to `File -> Global Configuration -> API -> Settings`.
+    *   Check **"Enable ActiveX and Socket Clients"**.
+    *   Uncheck **"Read-Only API"**.
+    *   Note the Port (usually **7497** for paper).
+*   **Crypto (Optional):** Go to Binance Testnet or use your real account (BE CAREFUL). Get an API Key and Secret.
+
+### Step 3: Configure the System
+1.  Rename `.env.example` to `.env`.
+2.  Open `.env` and fill in your keys:
+    ```env
+    OPENROUTER_KEY=sk-or-v1-your-key-here
+
+    # If trading stocks:
+    IB_ACCOUNT=DU12345
+    IB_PORT=7497
+
+    # If trading crypto:
+    BINANCE_API_KEY=your-api-key
+    BINANCE_SECRET_KEY=your-secret-key
+    BINANCE_TESTNET=True
+    ```
+
+### Step 4: Launch the Dashboard
+Run the "Easy Launcher" to verify everything works.
+```bash
+python easy_start.py
+```
+1.  Select **Option 1 (Launch Dashboard)**.
+2.  A web page will open.
+3.  On the sidebar, select **Trading Mode** (e.g., "Crypto").
+4.  Click **Connect**. You should see a green "Connected" message.
+
+### Step 5: Execute an AI Trade (Manual Trigger)
+1.  In the Dashboard, enter a symbol (e.g., `BTC/USDT` or `AAPL`).
+2.  Click **Analyze & Execute**.
+3.  **Watch the Logs:**
+    *   The system fetches data (Price, RSI, MACD).
+    *   It sends this data to the AI.
+    *   The AI "thinks" (e.g., "RSI is 30, Oversold. Trend is Up. Buy.").
+    *   The **Risk Manager** checks the trade (Is position < 10%? Is Stop Loss set?).
+    *   If approved, the order is placed on the exchange!
+
+### Step 6: Go Fully Autonomous
+Once you trust the system, run it in a loop from the command line:
+```bash
+# Example: Trade Crypto 24/7
+python main.py --mode CRYPTO --symbols BTC/USDT ETH/USDT --loop
+```
+The bot will now run forever, sleeping for 60 seconds between analysis cycles.
+
+---
+
 ## 📚 Module Guide (Architecture)
 
 ### 1. Engine (`engine/`)
@@ -46,15 +113,9 @@ The eyes.
 
 ---
 
-## 🚀 Operational Guide
+## 🚀 Advanced Setup (Environment Variables)
 
-### Prerequisites
-1.  **Python 3.10+**
-2.  **IB Gateway / TWS:** (For Stocks) Must be running and listening on port 7497 (Paper) or 7496 (Live).
-3.  **API Keys:** OpenRouter (AI) and Binance/Coinbase (Crypto).
-
-### Setup (Environment Variables)
-Create a `.env` file with these keys:
+Full list of supported variables in `.env`:
 
 ```env
 # --- GENERAL ---
@@ -78,25 +139,6 @@ BINANCE_TESTNET=True
 
 # --- NOTIFICATIONS ---
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
-```
-
-### Running the System
-
-**Option A: The Easy Launcher (Best for Noobs)**
-```bash
-python easy_start.py
-```
-*   Select **1** for Dashboard.
-*   Select **2** for Auto-Trader (IBKR).
-*   Select **3** for Auto-Trader (Crypto).
-
-**Option B: The Command Line (Best for Pros)**
-```bash
-# Run Crypto Bot on Kraken
-python main.py --mode CRYPTO --exchange kraken --symbols BTC/USD ETH/USD --loop
-
-# Run Stock Bot on IBKR
-python main.py --mode IBKR --symbols AAPL TSLA NVDA --loop
 ```
 
 ---

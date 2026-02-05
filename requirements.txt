@@ -1,0 +1,8 @@
+ib_insync
+streamlit
+openai
+pytest
+pytest-asyncio
+pandas
+python-dotenv
+watchdog

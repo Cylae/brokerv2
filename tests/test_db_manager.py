@@ -13,8 +13,9 @@ def db():
     if os.path.exists(TEST_DB):
         os.remove(TEST_DB)
 
-def test_log_and_retrieve_trade(db):
-    db.log_trade(
+@pytest.mark.asyncio
+async def test_log_and_retrieve_trade(db):
+    await db.log_trade(
         symbol="AAPL",
         action="BUY",
         quantity=10,
@@ -25,7 +26,7 @@ def test_log_and_retrieve_trade(db):
         order_id=12345
     )
 
-    trades = db.get_recent_trades()
+    trades = await db.get_recent_trades()
     assert len(trades) == 1
     t = trades[0]
     assert t['symbol'] == "AAPL"

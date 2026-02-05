@@ -2,6 +2,7 @@ import sqlite3
 import logging
 from datetime import datetime
 import os
+import asyncio
 
 class DatabaseManager:
     def __init__(self, db_path="trading_history.db"):
@@ -33,8 +34,8 @@ class DatabaseManager:
         except Exception as e:
             self.logger.error(f"Database initialization failed: {e}")
 
-    def log_trade(self, symbol, action, quantity, price, stop_loss, take_profit, reason, order_id):
-        """Log a trade to the database."""
+    def _log_trade_sync(self, symbol, action, quantity, price, stop_loss, take_profit, reason, order_id):
+        """Log a trade to the database (synchronous)."""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
@@ -51,8 +52,17 @@ class DatabaseManager:
         except Exception as e:
             self.logger.error(f"Failed to log trade: {e}")
 
-    def get_recent_trades(self, limit=10):
-        """Fetch recent trades."""
+    async def log_trade(self, symbol, action, quantity, price, stop_loss, take_profit, reason, order_id):
+        """Log a trade to the database (asynchronous)."""
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None,
+            self._log_trade_sync,
+            symbol, action, quantity, price, stop_loss, take_profit, reason, order_id
+        )
+
+    def _get_recent_trades_sync(self, limit=10):
+        """Fetch recent trades (synchronous)."""
         try:
             conn = sqlite3.connect(self.db_path)
             conn.row_factory = sqlite3.Row
@@ -64,3 +74,8 @@ class DatabaseManager:
         except Exception as e:
             self.logger.error(f"Failed to fetch trades: {e}")
             return []
+
+    async def get_recent_trades(self, limit=10):
+        """Fetch recent trades (asynchronous)."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._get_recent_trades_sync, limit)

@@ -93,7 +93,7 @@ async def analyze_symbol(engine, risk_manager, ai, db, notifier, symbol):
                 )
 
                 # Log & Notify
-                db.log_trade(
+                await db.log_trade(
                     symbol, action, quantity, price, stop_loss, take_profit, reason,
                     trade_result.order_id
                 )

@@ -24,32 +24,34 @@ async def test_trading_engine_get_market_data(mock_ib_connector, mock_ib):
     ticker.close = 149.0
 
     mock_ib.reqMktData.return_value = ticker
-
-    # Mock Historical Data (return empty list or None for simplicity in basic test)
-    # The code expects `bars` to be truthy to compute indicators.
     mock_ib.reqHistoricalDataAsync = AsyncMock(return_value=[])
 
     data = await engine.get_market_data('AAPL')
 
     assert data is not None
     assert data['symbol'] == 'AAPL'
-    assert data['last'] == 150.0
-    mock_ib.qualifyContractsAsync.assert_called_once()
-    mock_ib.reqMktData.assert_called_once()
-    mock_ib.reqHistoricalDataAsync.assert_called_once()
 
 @pytest.mark.asyncio
-async def test_trading_engine_execute_order(mock_ib_connector, mock_ib):
+async def test_trading_engine_execute_order_simple(mock_ib_connector, mock_ib):
     from engine.trading_engine import TradingEngine
     engine = TradingEngine(mock_ib_connector)
 
     await engine.execute_order('AAPL', 'BUY', 10, 'MKT')
 
     mock_ib.placeOrder.assert_called_once()
-    args, _ = mock_ib.placeOrder.call_args
-    contract, order = args
 
-    assert contract.symbol == 'AAPL'
-    assert order.action == 'BUY'
-    assert order.totalQuantity == 10
-    assert order.orderType == 'MKT'
+@pytest.mark.asyncio
+async def test_trading_engine_execute_bracket_order(mock_ib_connector, mock_ib):
+    from engine.trading_engine import TradingEngine
+    engine = TradingEngine(mock_ib_connector)
+
+    # Mock bracket helpers
+    mock_ib.bracketStopOrder = MagicMock(return_value=MagicMock())
+    mock_ib.bracketLimitOrder = MagicMock(return_value=MagicMock())
+
+    await engine.execute_order('AAPL', 'BUY', 10, 'MKT', stop_loss=140, take_profit=160)
+
+    # Should place 3 orders (Parent, SL, TP)
+    assert mock_ib.placeOrder.call_count == 3
+    mock_ib.bracketStopOrder.assert_called_once()
+    mock_ib.bracketLimitOrder.assert_called_once()

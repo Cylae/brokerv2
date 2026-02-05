@@ -6,6 +6,7 @@ import os
 
 from engine.ib_connector import IBConnector
 from engine.trading_engine import TradingEngine
+from engine.risk_manager import RiskManager
 from ai.ai_wrapper import AIWrapper
 from config import Config
 
@@ -20,7 +21,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def run_trading_cycle(engine, ai, symbols):
+async def run_trading_cycle(engine, risk_manager, ai, symbols):
     for symbol in symbols:
         logger.info(f"--- Analyzing {symbol} ---")
         market_data = await engine.get_market_data(symbol)
@@ -46,13 +47,31 @@ async def run_trading_cycle(engine, ai, symbols):
                         logger.warning(f"AI tried to buy {args['symbol']} but we are analyzing {symbol}. Ignoring mismatch.")
                         continue
 
-                    await engine.execute_order(args['symbol'], 'BUY', args['quantity'], 'MKT')
+                    # Risk Check
+                    price = market_data['last']
+                    stop_loss = args.get('stop_loss')
+                    take_profit = args.get('take_profit')
+
+                    valid, reason = await risk_manager.validate_trade(
+                        symbol, args['quantity'], price, 'BUY', stop_loss
+                    )
+
+                    if not valid:
+                        logger.warning(f"Risk Manager Rejected Trade: {reason}")
+                        continue
+
+                    await engine.execute_order(
+                        args['symbol'], 'BUY', args['quantity'], 'MKT',
+                        stop_loss=stop_loss, take_profit=take_profit
+                    )
 
                 elif cmd == 'sell_stock':
                     if args['symbol'].upper() != symbol.upper():
                         logger.warning(f"AI tried to sell {args['symbol']} but we are analyzing {symbol}. Ignoring mismatch.")
                         continue
 
+                    # Risk Check (Assuming Short Selling logic similar to buy for position size)
+                    # For MVP, focusing on long trades primarily, but keeping structure.
                     await engine.execute_order(args['symbol'], 'SELL', args['quantity'], 'MKT')
 
                 elif cmd == 'hold_position':
@@ -84,14 +103,20 @@ async def main():
         await connector.connect()
         engine = TradingEngine(connector)
 
+        # Helper to fetch account data for Risk Manager
+        async def account_provider():
+            return await engine.get_account_summary()
+
+        risk_manager = RiskManager(account_provider)
+
         if args.loop:
             logger.info("Starting continuous trading loop...")
             while True:
-                await run_trading_cycle(engine, ai, args.symbols)
+                await run_trading_cycle(engine, risk_manager, ai, args.symbols)
                 logger.info("Sleeping for 60 seconds...")
                 await asyncio.sleep(60)
         else:
-            await run_trading_cycle(engine, ai, args.symbols)
+            await run_trading_cycle(engine, risk_manager, ai, args.symbols)
 
     except KeyboardInterrupt:
         logger.info("Stopping...")

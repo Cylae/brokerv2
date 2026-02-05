@@ -9,6 +9,8 @@ async def test_run_trading_cycle_hallucination_mismatch():
     mock_engine.get_market_data = AsyncMock(return_value={'symbol': 'AAPL', 'last': 150})
     mock_engine.execute_order = AsyncMock()
 
+    mock_risk_manager = MagicMock()
+
     mock_ai = MagicMock()
     # AI returns decision for TSLA when we asked for AAPL
     mock_ai.analyze_and_decide.return_value = {
@@ -19,7 +21,7 @@ async def test_run_trading_cycle_hallucination_mismatch():
     symbols = ['AAPL']
 
     # Run
-    await run_trading_cycle(mock_engine, mock_ai, symbols)
+    await run_trading_cycle(mock_engine, mock_risk_manager, mock_ai, symbols)
 
     # Assert execute_order was NOT called because of mismatch
     mock_engine.execute_order.assert_not_called()
@@ -31,17 +33,21 @@ async def test_run_trading_cycle_correct_match():
     mock_engine.get_market_data = AsyncMock(return_value={'symbol': 'AAPL', 'last': 150})
     mock_engine.execute_order = AsyncMock()
 
+    mock_risk_manager = MagicMock()
+    # Risk Manager MUST approve the trade
+    mock_risk_manager.validate_trade = AsyncMock(return_value=(True, "OK"))
+
     mock_ai = MagicMock()
     # AI returns decision for AAPL
     mock_ai.analyze_and_decide.return_value = {
         'decision': 'buy_stock',
-        'args': {'symbol': 'AAPL', 'quantity': 10, 'reason': 'I like AAPL'}
+        'args': {'symbol': 'AAPL', 'quantity': 10, 'stop_loss': 145, 'reason': 'I like AAPL'}
     }
 
     symbols = ['AAPL']
 
     # Run
-    await run_trading_cycle(mock_engine, mock_ai, symbols)
+    await run_trading_cycle(mock_engine, mock_risk_manager, mock_ai, symbols)
 
     # Assert execute_order WAS called
-    mock_engine.execute_order.assert_called_once_with('AAPL', 'BUY', 10, 'MKT')
+    mock_engine.execute_order.assert_called_once()

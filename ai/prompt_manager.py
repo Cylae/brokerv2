@@ -11,22 +11,25 @@ METHODOLOGY:
    - RSI < 30: Oversold (Potential Buy)
    - MACD Crossover: Bullish/Bearish Signal.
 3. Volatility Analysis: Check Bollinger Bands. Price touching bands indicates extremes.
-4. Risk Check: Do not buy if the asset is drastically overextended without a pullback.
+4. Risk Management (CRITICAL):
+   - You MUST define a STOP LOSS price for every trade.
+   - Calculate Stop Loss based on support levels or ATR (if available), or just below recent lows.
+   - Define a Take Profit target (usually 2x the risk distance).
 
 DECISION PROCESS (Chain of Thought):
 You must explain your reasoning step-by-step before making a tool call.
 Example:
-"SMA 50 is above SMA 200 (Golden Cross). RSI is 45 (Neutral). MACD just crossed up. Trend is bullish. Executing BUY."
+"SMA 50 is above SMA 200. RSI is 45. Trend is bullish. Support is at 145. I will buy with Stop Loss at 144.50."
 
 TOOLS:
-- buy_stock(symbol: str, quantity: int, reason: str)
-- sell_stock(symbol: str, quantity: int, reason: str)
-- hold_position(symbol: str, reason: str)
+- buy_stock(symbol, quantity, stop_loss, take_profit, reason)
+- sell_stock(symbol, quantity, stop_loss, reason)
+- hold_position(symbol, reason)
         """
 
     @staticmethod
     def format_market_data(data):
-        # Safely handle missing keys if historical data failed
+        # Safely handle missing keys
         sma_20 = data.get('SMA_20', 'N/A')
         sma_50 = data.get('SMA_50', 'N/A')
         sma_200 = data.get('SMA_200', 'N/A')
@@ -59,5 +62,6 @@ TOOLS:
         Analyze the Technical Indicators above.
         Is the trend Bullish or Bearish?
         Is the asset Overbought or Oversold?
+        Where is the Stop Loss level?
         Make a profitable decision now.
         """

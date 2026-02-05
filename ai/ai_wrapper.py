@@ -30,9 +30,11 @@ class AIWrapper:
                         "properties": {
                             "symbol": {"type": "string", "description": "The stock ticker symbol"},
                             "quantity": {"type": "integer", "description": "Number of shares to buy"},
+                            "stop_loss": {"type": "number", "description": "Stop Loss Price (REQUIRED)"},
+                            "take_profit": {"type": "number", "description": "Take Profit Price (Optional)"},
                             "reason": {"type": "string", "description": "Reason for the decision"}
                         },
-                        "required": ["symbol", "quantity", "reason"]
+                        "required": ["symbol", "quantity", "stop_loss", "reason"]
                     }
                 }
             },
@@ -46,9 +48,10 @@ class AIWrapper:
                         "properties": {
                             "symbol": {"type": "string", "description": "The stock ticker symbol"},
                             "quantity": {"type": "integer", "description": "Number of shares to sell"},
+                             "stop_loss": {"type": "number", "description": "Stop Loss Price (REQUIRED)"},
                             "reason": {"type": "string", "description": "Reason for the decision"}
                         },
-                        "required": ["symbol", "quantity", "reason"]
+                        "required": ["symbol", "quantity", "stop_loss", "reason"]
                     }
                 }
             },
@@ -93,8 +96,6 @@ class AIWrapper:
                     "raw_response": message
                 }
             else:
-                # Handle cases where model doesn't use tools but replies with text
-                # Ideally, force tool use or parse text
                 self.logger.warning("AI did not use a tool. Raw content: " + str(message.content))
                 return {
                     "decision": "hold_position",

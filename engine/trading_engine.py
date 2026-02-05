@@ -67,23 +67,52 @@ class TradingEngine:
         # Merge Data
         return {**snapshot, **technicals}
 
-    async def execute_order(self, symbol, action, quantity, order_type='MKT', price=None):
-        """Executes an order."""
+    async def execute_order(self, symbol, action, quantity, order_type='MKT', price=None, stop_loss=None, take_profit=None):
+        """
+        Executes an order, optionally with Bracket (Stop Loss / Take Profit).
+        """
         contract = Stock(symbol, 'SMART', 'USD')
         await self.ib.qualifyContractsAsync(contract)
 
+        # Parent Order
         if order_type.upper() == 'MKT':
-            order = MarketOrder(action, quantity)
+            parent = MarketOrder(action, quantity)
         elif order_type.upper() == 'LMT':
             if price is None:
                 raise ValueError("Price must be provided for Limit orders.")
-            order = LimitOrder(action, quantity, price)
+            parent = LimitOrder(action, quantity, price)
         else:
             raise ValueError(f"Unsupported order type: {order_type}")
 
-        trade = self.ib.placeOrder(contract, order)
-        self.logger.info(f"Order placed: {action} {quantity} {symbol} @ {order_type} {price if price else ''}")
-        return trade
+        orders_to_place = [parent]
+
+        # Bracket Logic (only if action is BUY for simplicity in this version)
+        # For SELL orders, logic reverses (SL > Price, TP < Price)
+
+        if (stop_loss or take_profit) and action == 'BUY':
+            parent.transmit = False # Do not transmit until child orders are attached
+
+            if stop_loss:
+                stop = self.ib.bracketStopOrder(parent, stop_loss)
+                stop.transmit = True # Last child transmits all
+                if take_profit:
+                    stop.transmit = False # Wait for TP
+                orders_to_place.append(stop)
+
+            if take_profit:
+                limit = self.ib.bracketLimitOrder(parent, take_profit)
+                limit.transmit = True
+                orders_to_place.append(limit)
+
+        # TODO: Handle Bracket for SELL (Short) orders if needed
+
+        trades = []
+        for o in orders_to_place:
+            trade = self.ib.placeOrder(contract, o)
+            trades.append(trade)
+
+        self.logger.info(f"Placed {len(orders_to_place)} orders for {symbol}. Action: {action}")
+        return trades[0] # Return parent trade
 
     async def get_account_summary(self):
         """Returns account summary."""

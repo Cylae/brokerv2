@@ -50,10 +50,22 @@ class IBKRConnector(BaseConnector):
         # Task 1: Snapshot
         async def get_snapshot():
             ticker = self.ib.reqMktData(contract, '', False, False)
-            for _ in range(20):
-                if ticker.last or ticker.bid or ticker.ask:
-                    break
-                await asyncio.sleep(0.05)
+            if not (ticker.last or ticker.bid or ticker.ask):
+                future = asyncio.Future()
+
+                def on_update(tickers):
+                    if ticker in tickers:
+                        if ticker.last or ticker.bid or ticker.ask:
+                            if not future.done():
+                                future.set_result(True)
+
+                self.ib.pendingTickersEvent += on_update
+                try:
+                    await asyncio.wait_for(future, timeout=1.0)
+                except asyncio.TimeoutError:
+                    pass
+                finally:
+                    self.ib.pendingTickersEvent -= on_update
             return ticker
 
         # Task 2: History

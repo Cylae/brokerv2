@@ -1,4 +1,6 @@
+import asyncio
 import logging
+import time
 from config import Config
 from .models import RiskCheck
 
@@ -10,6 +12,31 @@ class RiskManager:
         self.account_data_provider = account_data_provider
         self.logger = logging.getLogger(__name__)
 
+        # Caching
+        self._lock = asyncio.Lock()
+        self._last_account_data = None
+        self._last_fetch_time = 0
+        self._cache_ttl = 60  # seconds
+
+    async def _get_account_data(self):
+        """Fetches account data with caching logic."""
+        current_time = time.time()
+
+        # Fast path: check cache first
+        if self._last_account_data and (current_time - self._last_fetch_time < self._cache_ttl):
+            return self._last_account_data
+
+        async with self._lock:
+            # Double-check inside lock
+            current_time = time.time()
+            if self._last_account_data and (current_time - self._last_fetch_time < self._cache_ttl):
+                return self._last_account_data
+
+            data = await self.account_data_provider()
+            self._last_account_data = data
+            self._last_fetch_time = time.time()
+            return data
+
     async def validate_trade(self, symbol, quantity, price, action, stop_loss=None) -> RiskCheck:
         """
         Checks if a trade violates any risk rules.
@@ -18,7 +45,7 @@ class RiskManager:
 
         # 1. Fetch Account Data
         try:
-            account_data = await self.account_data_provider()
+            account_data = await self._get_account_data()
             # Handle if provider returns dict or AccountSummary object
             if hasattr(account_data, 'net_liquidation'):
                 net_liquidation = account_data.net_liquidation

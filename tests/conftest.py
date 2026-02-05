@@ -3,6 +3,9 @@ from unittest.mock import MagicMock, AsyncMock
 import sys
 import os
 
+# Set Env Var for Config to load successfully during imports
+os.environ['OPENROUTER_KEY'] = 'sk-mock-key-for-testing'
+
 # Add root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 

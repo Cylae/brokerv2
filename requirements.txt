@@ -8,3 +8,5 @@ python-dotenv
 watchdog
 requests
 ccxt
+pydantic
+pydantic-settings

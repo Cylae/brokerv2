@@ -17,6 +17,7 @@ The ultimate "Senior Quantitative Architect" grade trading system. It combines P
     *   **Database:** SQLite persistence for trade history.
     *   **Notifications:** Real-time Discord alerts.
     *   **Resilience:** Auto-reconnect logic with exponential backoff.
+*   **Configuration:** Strict validation using `pydantic`.
 
 ---
 
@@ -27,11 +28,12 @@ The heart of the system.
 *   `base_connector.py`: The abstract blueprint for all exchanges.
 *   `ib_connector.py`: The specialized driver for Interactive Brokers.
 *   `ccxt_connector.py`: The universal driver for Crypto exchanges.
-*   `risk_manager.py`: The "Gatekeeper". Validates every trade against safety rules before execution.
+*   `risk_manager.py`: The "Gatekeeper". Validates every trade against safety rules before execution. Returns `RiskCheck` objects.
 *   `market_utils.py`: Knows when markets open and close.
 *   `db_manager.py`: Handles persistent storage (SQLite).
 *   `notifier.py`: Sends Discord webhooks.
-*   `models.py`: Unified data structures (`MarketData`, `Position`, etc.).
+*   `models.py`: Unified data structures (`MarketData`, `Position`, `RiskCheck` etc.).
+*   `errors.py`: Centralized exception hierarchy.
 
 ### 2. AI (`ai/`)
 The brain.
@@ -40,7 +42,7 @@ The brain.
 
 ### 3. Dashboard (`dashboard/`)
 The eyes.
-*   `app.py`: A Streamlit web application to view portfolio status and manually trigger AI analysis.
+*   `app.py`: A Streamlit web application. Supports "Unified Portfolio" view to aggregate net worth across exchanges.
 
 ---
 
@@ -114,4 +116,4 @@ To verify the system integrity, run the test suite:
 ```bash
 python -m pytest
 ```
-This runs 20+ tests covering connection logic, AI reasoning, risk management, and order execution mocks.
+This runs ~20 tests covering connection logic, AI reasoning, risk management, and order execution mocks.

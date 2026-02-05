@@ -18,10 +18,10 @@ st.title("🤖 Autonomous Multi-Model AI Trading System")
 st.sidebar.header("Configuration")
 
 # Trading Mode
-trading_mode = st.sidebar.radio("Trading Mode", ("IBKR (Stocks)", "Crypto (Generic)"))
+trading_mode = st.sidebar.radio("Trading Mode", ("IBKR (Stocks)", "Crypto (Generic)", "Unified Portfolio"))
 
-api_key = st.sidebar.text_input("OpenRouter API Key", type="password", value=Config.OPENROUTER_API_KEY)
-model = st.sidebar.text_input("AI Model", value=Config.OPENROUTER_MODEL)
+api_key = st.sidebar.text_input("OpenRouter API Key", type="password", value=Config.OPENROUTER_KEY.get_secret_value() if Config and Config.OPENROUTER_KEY else "")
+model = st.sidebar.text_input("AI Model", value=Config.OPENROUTER_MODEL if Config else "mistralai/mistral-7b-instruct")
 
 if 'connector' not in st.session_state:
     st.session_state.connector = None
@@ -32,156 +32,224 @@ def log(message):
     timestamp = datetime.now().strftime("%H:%M:%S")
     st.session_state.logs.append(f"[{timestamp}] {message}")
 
-# Mode Specifics
-if trading_mode == "IBKR (Stocks)":
-    st.sidebar.subheader("IBKR Settings")
-    ib_host = st.sidebar.text_input("IB Host", value=Config.IB_HOST)
-    ib_port = st.sidebar.number_input("IB Port", value=Config.IB_PORT)
-    client_id = st.sidebar.number_input("Client ID", value=Config.IB_CLIENT_ID)
+# --- UNIFIED PORTFOLIO LOGIC ---
+if trading_mode == "Unified Portfolio":
+    st.header("🌍 Unified Portfolio Overview")
 
-    if st.button("Connect to IBKR"):
-        try:
-            connector = IBKRConnector(host=ib_host, port=ib_port, client_id=client_id)
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(connector.connect())
-            st.session_state.connector = connector
-            st.session_state.mode = 'IBKR'
-            st.success("Connected to IBKR")
-        except Exception as e:
-            st.error(f"IBKR Connection failed: {e}")
+    if st.button("Fetch All Accounts"):
+        with st.spinner("Connecting to all exchanges..."):
+            portfolios = []
 
-else: # Crypto
-    st.sidebar.subheader("Crypto Settings")
-    exchange_id = st.sidebar.selectbox("Exchange", ["binance", "coinbase", "kraken", "kucoin"], index=0)
-    bin_key = st.sidebar.text_input("API Key", value=Config.BINANCE_API_KEY, type="password")
-    bin_secret = st.sidebar.text_input("API Secret", value=Config.BINANCE_SECRET_KEY, type="password")
-    testnet = st.sidebar.checkbox("Testnet", value=Config.BINANCE_TESTNET)
-
-    if st.button("Connect to Exchange"):
-        try:
-            connector = CCXTConnector(api_key=bin_key, secret_key=bin_secret, exchange_id=exchange_id, testnet=testnet)
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(connector.connect())
-            st.session_state.connector = connector
-            st.session_state.mode = 'CRYPTO'
-            st.success(f"Connected to {exchange_id}")
-        except Exception as e:
-            st.error(f"Connection failed: {e}")
-
-# Disconnect Logic
-if st.session_state.connector and st.session_state.connector.connected:
-    if st.sidebar.button("Disconnect"):
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(st.session_state.connector.disconnect())
-        st.session_state.connector = None
-        st.rerun()
-
-# Dashboard
-if st.session_state.connector and st.session_state.connector.connected:
-    engine = st.session_state.connector
-
-    st.header("2. Portfolio")
-    if st.button("Refresh Account"):
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-            summary = loop.run_until_complete(engine.get_account_summary())
-
-            col1, col2 = st.columns(2)
-            col1.metric("Net Liquidation", f"{summary.net_liquidation} {summary.currency}")
-            col2.metric("Total Cash", f"{summary.total_cash} {summary.currency}")
-
-            positions = loop.run_until_complete(engine.get_positions())
-            if positions:
-                st.write("Positions:")
-                # Convert list of Position objects to Dict for DataFrame
-                pos_data = [
-                    {"Symbol": p.symbol, "Quantity": p.quantity, "Avg Cost": p.avg_cost}
-                    for p in positions
-                ]
-                st.dataframe(pd.DataFrame(pos_data))
-            else:
-                st.info("No positions.")
-        except Exception as e:
-            st.error(f"Error fetching account data: {e}")
-
-    st.header("3. AI Auto-Trade")
-    default_sym = "AAPL" if st.session_state.mode == 'IBKR' else "BTC/USDT"
-    symbol = st.text_input("Symbol to Analyze", value=default_sym)
-
-    if st.button("Analyze & Execute"):
-        if not api_key:
-            st.error("Please provide OpenRouter API Key")
-        else:
-            log(f"Starting analysis for {symbol}...")
-            with st.spinner("Fetching Market Data..."):
+            # 1. IBKR
+            if Config and Config.IB_HOST:
                 try:
+                    ib = IBKRConnector(Config.IB_HOST, Config.IB_PORT, Config.IB_CLIENT_ID)
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
+                    loop.run_until_complete(ib.connect())
+                    summary = loop.run_until_complete(ib.get_account_summary())
+                    positions = loop.run_until_complete(ib.get_positions())
+                    loop.run_until_complete(ib.disconnect())
 
-                    market_data = loop.run_until_complete(engine.get_market_data(symbol))
-
-                    if market_data:
-                        st.subheader(f"Market Data: {symbol}")
-                        col_price, col_tech = st.columns(2)
-                        with col_price:
-                            st.metric("Last Price", market_data.last)
-                            st.metric("Volume", market_data.volume)
-
-                        with col_tech:
-                            inds = market_data.indicators
-                            st.write("**Indicators**")
-                            st.write(f"SMA 20: {inds.get('SMA_20', 'N/A')}")
-                            st.write(f"RSI: {inds.get('RSI', 'N/A')}")
-                            st.write(f"MACD: {inds.get('MACD', 'N/A')}")
-
-                        ai = AIWrapper(api_key, model)
-
-                        # Prepare dict for AI
-                        md_dict = {
-                            'symbol': market_data.symbol,
-                            'last': market_data.last,
-                            'bid': market_data.bid,
-                            'ask': market_data.ask,
-                            'volume': market_data.volume,
-                            'timestamp': market_data.timestamp,
-                            **market_data.indicators
-                        }
-
-                        with st.spinner("AI Thinking..."):
-                            decision = loop.run_until_complete(ai.analyze_and_decide(md_dict))
-
-                        if decision:
-                            st.subheader("AI Decision")
-                            st.write(f"**Action:** {decision['decision']}")
-                            st.write(f"**Reason:** {decision['args'].get('reason', 'No reason')}")
-                            log(f"AI Decision: {decision['decision']}")
-
-                            cmd = decision['decision']
-                            args = decision['args']
-
-                            if cmd in ['buy_stock', 'sell_stock']:
-                                with st.spinner("Executing Order..."):
-                                    action = 'BUY' if cmd == 'buy_stock' else 'SELL'
-                                    res = loop.run_until_complete(engine.execute_order(
-                                        args['symbol'], action, args['quantity'], 'MKT',
-                                        stop_loss=args.get('stop_loss'),
-                                        take_profit=args.get('take_profit')
-                                    ))
-                                    st.success(f"Order {res.order_id} Placed: {res.status}")
-                                    log(f"{action} {args['quantity']} {args['symbol']}")
-                            else:
-                                st.info("Holding position.")
-                    else:
-                        st.error("Failed to fetch market data.")
+                    portfolios.append({
+                        "Exchange": "IBKR",
+                        "Net Liquidation": summary.net_liquidation,
+                        "Currency": summary.currency,
+                        "Positions": len(positions)
+                    })
                 except Exception as e:
-                     st.error(f"Error during execution: {e}")
-                     log(f"Error: {e}")
+                    st.error(f"IBKR Error: {e}")
 
-st.header("4. System Logs")
-for l in reversed(st.session_state.logs):
-    st.text(l)
+            # 2. Crypto (Binance)
+            if Config and Config.BINANCE_API_KEY:
+                try:
+                    ccxt = CCXTConnector(
+                        Config.BINANCE_API_KEY.get_secret_value(),
+                        Config.BINANCE_SECRET_KEY.get_secret_value(),
+                        exchange_id=Config.CRYPTO_EXCHANGE,
+                        testnet=Config.BINANCE_TESTNET
+                    )
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    loop.run_until_complete(ccxt.connect())
+                    summary = loop.run_until_complete(ccxt.get_account_summary())
+                    positions = loop.run_until_complete(ccxt.get_positions())
+                    loop.run_until_complete(ccxt.disconnect())
+
+                    portfolios.append({
+                        "Exchange": Config.CRYPTO_EXCHANGE.upper(),
+                        "Net Liquidation": summary.net_liquidation,
+                        "Currency": summary.currency,
+                        "Positions": len(positions)
+                    })
+                except Exception as e:
+                    st.error(f"Crypto Error: {e}")
+
+            # Display
+            if portfolios:
+                df = pd.DataFrame(portfolios)
+                st.dataframe(df)
+                total_usd = df[df['Currency'] == 'USD']['Net Liquidation'].sum() + \
+                            df[df['Currency'] == 'USDT']['Net Liquidation'].sum()
+                st.metric("Approx. Total Net Worth (USD)", f"${total_usd:,.2f}")
+            else:
+                st.warning("No exchanges connected or configured.")
+
+# --- INDIVIDUAL TRADING MODES ---
+else:
+    # Mode Specifics
+    if trading_mode == "IBKR (Stocks)":
+        st.sidebar.subheader("IBKR Settings")
+        ib_host = st.sidebar.text_input("IB Host", value=Config.IB_HOST if Config else "127.0.0.1")
+        ib_port = st.sidebar.number_input("IB Port", value=Config.IB_PORT if Config else 7497)
+        client_id = st.sidebar.number_input("Client ID", value=Config.IB_CLIENT_ID if Config else 1)
+
+        if st.button("Connect to IBKR"):
+            try:
+                connector = IBKRConnector(host=ib_host, port=ib_port, client_id=client_id)
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(connector.connect())
+                st.session_state.connector = connector
+                st.session_state.mode = 'IBKR'
+                st.success("Connected to IBKR")
+            except Exception as e:
+                st.error(f"IBKR Connection failed: {e}")
+
+    elif trading_mode == "Crypto (Generic)": # Crypto
+        st.sidebar.subheader("Crypto Settings")
+        exchange_id = st.sidebar.selectbox("Exchange", ["binance", "coinbase", "kraken", "kucoin"], index=0)
+
+        # Use Config values if available
+        def_key = Config.BINANCE_API_KEY.get_secret_value() if Config and Config.BINANCE_API_KEY else ""
+        def_sec = Config.BINANCE_SECRET_KEY.get_secret_value() if Config and Config.BINANCE_SECRET_KEY else ""
+
+        bin_key = st.sidebar.text_input("API Key", value=def_key, type="password")
+        bin_secret = st.sidebar.text_input("API Secret", value=def_sec, type="password")
+        testnet = st.sidebar.checkbox("Testnet", value=Config.BINANCE_TESTNET if Config else False)
+
+        if st.button("Connect to Exchange"):
+            try:
+                connector = CCXTConnector(api_key=bin_key, secret_key=bin_secret, exchange_id=exchange_id, testnet=testnet)
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(connector.connect())
+                st.session_state.connector = connector
+                st.session_state.mode = 'CRYPTO'
+                st.success(f"Connected to {exchange_id}")
+            except Exception as e:
+                st.error(f"Connection failed: {e}")
+
+    # Disconnect Logic
+    if st.session_state.connector and st.session_state.connector.connected:
+        if st.sidebar.button("Disconnect"):
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(st.session_state.connector.disconnect())
+            st.session_state.connector = None
+            st.rerun()
+
+    # Dashboard View (Single Connector)
+    if st.session_state.connector and st.session_state.connector.connected:
+        engine = st.session_state.connector
+
+        st.header("2. Portfolio")
+        if st.button("Refresh Account"):
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+
+                summary = loop.run_until_complete(engine.get_account_summary())
+
+                col1, col2 = st.columns(2)
+                col1.metric("Net Liquidation", f"{summary.net_liquidation} {summary.currency}")
+                col2.metric("Total Cash", f"{summary.total_cash} {summary.currency}")
+
+                positions = loop.run_until_complete(engine.get_positions())
+                if positions:
+                    st.write("Positions:")
+                    pos_data = [
+                        {"Symbol": p.symbol, "Quantity": p.quantity, "Avg Cost": p.avg_cost}
+                        for p in positions
+                    ]
+                    st.dataframe(pd.DataFrame(pos_data))
+                else:
+                    st.info("No positions.")
+            except Exception as e:
+                st.error(f"Error fetching account data: {e}")
+
+        st.header("3. AI Auto-Trade")
+        default_sym = "AAPL" if st.session_state.mode == 'IBKR' else "BTC/USDT"
+        symbol = st.text_input("Symbol to Analyze", value=default_sym)
+
+        if st.button("Analyze & Execute"):
+            if not api_key:
+                st.error("Please provide OpenRouter API Key")
+            else:
+                log(f"Starting analysis for {symbol}...")
+                with st.spinner("Fetching Market Data..."):
+                    try:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+
+                        market_data = loop.run_until_complete(engine.get_market_data(symbol))
+
+                        if market_data:
+                            st.subheader(f"Market Data: {symbol}")
+                            col_price, col_tech = st.columns(2)
+                            with col_price:
+                                st.metric("Last Price", market_data.last)
+                                st.metric("Volume", market_data.volume)
+
+                            with col_tech:
+                                inds = market_data.indicators
+                                st.write("**Indicators**")
+                                st.write(f"SMA 20: {inds.get('SMA_20', 'N/A')}")
+                                st.write(f"RSI: {inds.get('RSI', 'N/A')}")
+                                st.write(f"MACD: {inds.get('MACD', 'N/A')}")
+
+                            ai = AIWrapper(api_key, model)
+
+                            md_dict = {
+                                'symbol': market_data.symbol,
+                                'last': market_data.last,
+                                'bid': market_data.bid,
+                                'ask': market_data.ask,
+                                'volume': market_data.volume,
+                                'timestamp': market_data.timestamp,
+                                **market_data.indicators
+                            }
+
+                            with st.spinner("AI Thinking..."):
+                                decision = loop.run_until_complete(ai.analyze_and_decide(md_dict))
+
+                            if decision:
+                                st.subheader("AI Decision")
+                                st.write(f"**Action:** {decision['decision']}")
+                                st.write(f"**Reason:** {decision['args'].get('reason', 'No reason')}")
+                                log(f"AI Decision: {decision['decision']}")
+
+                                cmd = decision['decision']
+                                args = decision['args']
+
+                                if cmd in ['buy_stock', 'sell_stock']:
+                                    with st.spinner("Executing Order..."):
+                                        action = 'BUY' if cmd == 'buy_stock' else 'SELL'
+                                        res = loop.run_until_complete(engine.execute_order(
+                                            args['symbol'], action, args['quantity'], 'MKT',
+                                            stop_loss=args.get('stop_loss'),
+                                            take_profit=args.get('take_profit')
+                                        ))
+                                        st.success(f"Order {res.order_id} Placed: {res.status}")
+                                        log(f"{action} {args['quantity']} {args['symbol']}")
+                                else:
+                                    st.info("Holding position.")
+                        else:
+                            st.error("Failed to fetch market data.")
+                    except Exception as e:
+                         st.error(f"Error during execution: {e}")
+                         log(f"Error: {e}")
+
+    st.header("4. System Logs")
+    for l in reversed(st.session_state.logs):
+        st.text(l)

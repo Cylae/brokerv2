@@ -1,0 +1,20 @@
+import pytest
+from pydantic import ValidationError
+import os
+
+def test_config_validation():
+    from config import Settings
+
+    # Valid Case
+    os.environ['OPENROUTER_KEY'] = 'sk-test'
+    settings = Settings()
+    assert settings.OPENROUTER_KEY.get_secret_value() == 'sk-test'
+    assert settings.IB_PORT == 7497
+
+def test_config_missing_required():
+    from config import Settings
+    if 'OPENROUTER_KEY' in os.environ:
+        del os.environ['OPENROUTER_KEY']
+
+    with pytest.raises(ValidationError):
+        Settings()

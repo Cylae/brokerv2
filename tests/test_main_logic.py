@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from main import analyze_symbol
-from engine.models import MarketData, TradeResult
+from engine.models import MarketData, TradeResult, RiskCheck
 
 @pytest.mark.asyncio
 async def test_analyze_symbol_flow():
@@ -25,7 +25,8 @@ async def test_analyze_symbol_flow():
     ))
 
     mock_risk_manager = MagicMock()
-    mock_risk_manager.validate_trade = AsyncMock(return_value=(True, "OK"))
+    # Mock return RiskCheck object, NOT tuple
+    mock_risk_manager.validate_trade = AsyncMock(return_value=RiskCheck(True, "OK"))
 
     mock_ai = MagicMock()
     mock_ai.analyze_and_decide = AsyncMock(return_value={

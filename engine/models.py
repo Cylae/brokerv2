@@ -35,3 +35,8 @@ class AccountSummary:
     net_liquidation: float
     total_cash: float
     currency: str = "USD"
+
+@dataclass
+class RiskCheck:
+    passed: bool
+    reason: str

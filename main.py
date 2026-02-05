@@ -39,8 +39,6 @@ async def analyze_symbol(engine, risk_manager, ai, db, notifier, symbol):
         logger.info(f"Market Data ({symbol}): Last {market_data.last}")
 
         # 2. AI Analysis
-        # Adapter: Convert MarketData object to dict for AI Wrapper if needed, or update AI Wrapper.
-        # AIWrapper expects dict currently. Let's convert.
         market_data_dict = {
             'symbol': market_data.symbol,
             'last': market_data.last,
@@ -79,12 +77,12 @@ async def analyze_symbol(engine, risk_manager, ai, db, notifier, symbol):
             reason = args.get('reason', 'No reason')
             action = 'BUY' if cmd == 'buy_stock' else 'SELL'
 
-            valid, validation_msg = await risk_manager.validate_trade(
+            risk_check = await risk_manager.validate_trade(
                 symbol, quantity, price, action, stop_loss
             )
 
-            if not valid:
-                logger.warning(f"Risk Rejected ({symbol}): {validation_msg}")
+            if not risk_check.passed:
+                logger.warning(f"Risk Rejected ({symbol}): {risk_check.reason}")
                 return
 
             # Execute
@@ -131,25 +129,24 @@ async def main():
     # New Config for Exchange
     Config.CRYPTO_EXCHANGE = args.exchange
 
-    try:
-        Config.validate()
-    except ValueError as e:
-        logger.error(e)
+    # Pydantic Config is validated on import, but we can re-validate or just use it.
+    if not Config:
+        logger.error("Configuration failed loading.")
         sys.exit(1)
 
     logger.info(f"Starting System in {Config.TRADING_MODE} Mode")
 
     if Config.TRADING_MODE == 'CRYPTO':
         connector = CCXTConnector(
-            Config.BINANCE_API_KEY,
-            Config.BINANCE_SECRET_KEY,
+            Config.BINANCE_API_KEY.get_secret_value() if Config.BINANCE_API_KEY else "",
+            Config.BINANCE_SECRET_KEY.get_secret_value() if Config.BINANCE_SECRET_KEY else "",
             exchange_id=Config.CRYPTO_EXCHANGE,
             testnet=Config.BINANCE_TESTNET
         )
     else:
         connector = IBKRConnector(Config.IB_HOST, Config.IB_PORT, Config.IB_CLIENT_ID)
 
-    ai = AIWrapper(Config.OPENROUTER_API_KEY, Config.OPENROUTER_MODEL)
+    ai = AIWrapper(Config.OPENROUTER_KEY.get_secret_value(), Config.OPENROUTER_MODEL)
     db = DatabaseManager()
     notifier = Notifier()
 
@@ -159,8 +156,7 @@ async def main():
             await connector.connect()
 
             async def account_provider():
-                summary = await connector.get_account_summary()
-                return {'NetLiquidation': summary.net_liquidation}
+                return await connector.get_account_summary()
 
             risk_manager = RiskManager(account_provider)
 

@@ -1,13 +1,28 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from main import analyze_symbol
+from engine.models import MarketData, TradeResult
 
 @pytest.mark.asyncio
 async def test_analyze_symbol_flow():
     # Setup Mocks
     mock_engine = MagicMock()
-    mock_engine.get_market_data = AsyncMock(return_value={'symbol': 'AAPL', 'last': 150})
-    mock_engine.execute_order = AsyncMock(return_value=MagicMock())
+    # Return Unified MarketData Object
+    mock_engine.get_market_data = AsyncMock(return_value=MarketData(
+        symbol='AAPL',
+        timestamp='now',
+        last=150.0,
+        bid=149.0,
+        ask=151.0,
+        volume=1000
+    ))
+    mock_engine.execute_order = AsyncMock(return_value=TradeResult(
+        order_id='123',
+        symbol='AAPL',
+        action='BUY',
+        quantity=10,
+        status='FILLED'
+    ))
 
     mock_risk_manager = MagicMock()
     mock_risk_manager.validate_trade = AsyncMock(return_value=(True, "OK"))

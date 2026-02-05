@@ -1,2 +1,2 @@
 from .ib_connector import IBKRConnector
-from .binance_connector import BinanceConnector
+from .ccxt_connector import CCXTConnector

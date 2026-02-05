@@ -2,8 +2,10 @@ from ib_insync import IB, Stock, MarketOrder, LimitOrder, util
 import logging
 import asyncio
 from datetime import datetime
+from typing import Optional, List
 from .base_connector import BaseConnector
 from .indicators import Indicators
+from .models import MarketData, TradeResult, Position, AccountSummary
 
 class IBKRConnector(BaseConnector):
     def __init__(self, host='127.0.0.1', port=7497, client_id=1):
@@ -34,10 +36,10 @@ class IBKRConnector(BaseConnector):
             self.connected = False
             self.logger.info("Disconnected from IBKR.")
 
-    async def check_connection(self):
+    async def check_connection(self) -> bool:
         return self.ib.isConnected()
 
-    async def get_market_data(self, symbol):
+    async def get_market_data(self, symbol: str) -> Optional[MarketData]:
         contract = Stock(symbol, 'SMART', 'USD')
         try:
             await self.ib.qualifyContractsAsync(contract)
@@ -45,25 +47,16 @@ class IBKRConnector(BaseConnector):
             self.logger.error(f"Could not qualify contract for {symbol}: {e}")
             return None
 
-        # OPTIMIZATION: Reduce duration from 10 D to 2 D (48 bars).
-        # Enough for SMA 20, but not SMA 50 or 200.
-        # Wait, if we want SMA 50/200, we need history.
-        # Let's check `Indicators.py`. It calculates SMA 20, 50, 200.
-        # If we optimize speed, we might sacrifice long-term SMA accuracy or fetch it once.
-        # For "Efficient" optimization request, let's assume accuracy > pure speed, but parallel fetch helps.
-        # IBKR reqMktData is streaming/subscription based usually, but here we use snapshot.
-        # We can run reqMktData and reqHistoricalDataAsync in parallel tasks.
-
         # Task 1: Snapshot
         async def get_snapshot():
             ticker = self.ib.reqMktData(contract, '', False, False)
-            for _ in range(20): # Reduce wait loops
+            for _ in range(20):
                 if ticker.last or ticker.bid or ticker.ask:
                     break
                 await asyncio.sleep(0.05)
             return ticker
 
-        # Task 2: History (Keep 10 D for full indicator support, but parallelize)
+        # Task 2: History
         async def get_history():
             return await self.ib.reqHistoricalDataAsync(
                 contract,
@@ -76,17 +69,9 @@ class IBKRConnector(BaseConnector):
 
         ticker, bars = await asyncio.gather(get_snapshot(), get_history())
 
-        snapshot = {
-            'symbol': symbol,
-            'timestamp': datetime.now(),
-            'last': ticker.last if ticker.last else ticker.close,
-            'bid': ticker.bid,
-            'ask': ticker.ask,
-            'volume': ticker.volume,
-            'close': ticker.close
-        }
+        last_price = ticker.last if ticker.last else ticker.close
 
-        if not snapshot['last']:
+        if not last_price:
              self.logger.warning(f"No market data received for {symbol}")
              return None
 
@@ -95,9 +80,17 @@ class IBKRConnector(BaseConnector):
             df = util.df(bars)
             technicals = Indicators.get_technical_summary(df)
 
-        return {**snapshot, **technicals}
+        return MarketData(
+            symbol=symbol,
+            timestamp=datetime.now(),
+            last=last_price,
+            bid=ticker.bid,
+            ask=ticker.ask,
+            volume=ticker.volume,
+            indicators=technicals
+        )
 
-    async def execute_order(self, symbol, action, quantity, order_type='MKT', price=None, stop_loss=None, take_profit=None):
+    async def execute_order(self, symbol: str, action: str, quantity: float, order_type: str = 'MKT', price: float = None, stop_loss: float = None, take_profit: float = None) -> TradeResult:
         contract = Stock(symbol, 'SMART', 'USD')
         await self.ib.qualifyContractsAsync(contract)
 
@@ -130,24 +123,40 @@ class IBKRConnector(BaseConnector):
             t = self.ib.placeOrder(contract, o)
             trades.append(t)
 
-        return trades[0]
+        parent_trade = trades[0]
+        # Note: orderId might not be populated instantly without a wait loop, but usually valid in async flow if connected.
 
-    async def get_account_summary(self):
-        tags = 'NetLiquidation,TotalCashValue,GrossPositionValue'
+        return TradeResult(
+            order_id=str(parent_trade.order.orderId),
+            symbol=symbol,
+            action=action,
+            quantity=quantity,
+            price=price,
+            status=parent_trade.orderStatus.status
+        )
+
+    async def get_account_summary(self) -> AccountSummary:
+        tags = 'NetLiquidation,TotalCashValue'
         summary = await self.ib.accountSummaryAsync()
-        data = {}
+        vals = {}
         for item in summary:
              if item.tag in tags.split(','):
-                 data[item.tag] = float(item.value)
-        return data
+                 vals[item.tag] = float(item.value)
 
-    async def get_positions(self):
+        return AccountSummary(
+            net_liquidation=vals.get('NetLiquidation', 0.0),
+            total_cash=vals.get('TotalCashValue', 0.0),
+            currency='USD'
+        )
+
+    async def get_positions(self) -> List[Position]:
         positions = self.ib.positions()
         pos_list = []
         for p in positions:
-            pos_list.append({
-                'symbol': p.contract.symbol,
-                'position': p.position,
-                'avgCost': p.avgCost
-            })
+            pos_list.append(Position(
+                symbol=p.contract.symbol,
+                quantity=p.position,
+                avg_cost=p.avgCost,
+                current_price=0.0 # IBKR positions object doesn't have live price usually, separate lookup needed if strictly required
+            ))
         return pos_list

@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+from typing import List, Optional
+from .models import MarketData, TradeResult, Position, AccountSummary
 
 class BaseConnector(ABC):
     @abstractmethod
@@ -12,42 +14,35 @@ class BaseConnector(ABC):
         pass
 
     @abstractmethod
-    async def check_connection(self):
+    async def check_connection(self) -> bool:
         """Check if connection is active."""
         pass
 
     @abstractmethod
-    async def get_market_data(self, symbol):
-        """
-        Fetch market data (Snapshot + Historical).
-        Should return a dictionary with:
-        {
-            'symbol': str,
-            'timestamp': datetime,
-            'last': float,
-            'bid': float,
-            'ask': float,
-            'volume': float,
-            'SMA_20': float,
-            ... (other indicators)
-        }
-        """
+    async def get_market_data(self, symbol: str) -> Optional[MarketData]:
+        """Fetch market data (Snapshot + Historical)."""
         pass
 
     @abstractmethod
-    async def execute_order(self, symbol, action, quantity, order_type='MKT', price=None, stop_loss=None, take_profit=None):
-        """
-        Execute an order.
-        Returns a Trade object or Dictionary with order details.
-        """
+    async def execute_order(
+        self,
+        symbol: str,
+        action: str,
+        quantity: float,
+        order_type: str = 'MKT',
+        price: Optional[float] = None,
+        stop_loss: Optional[float] = None,
+        take_profit: Optional[float] = None
+    ) -> TradeResult:
+        """Execute an order."""
         pass
 
     @abstractmethod
-    async def get_account_summary(self):
-        """Return account summary (NetLiquidation, etc)."""
+    async def get_account_summary(self) -> AccountSummary:
+        """Return account summary."""
         pass
 
     @abstractmethod
-    async def get_positions(self):
+    async def get_positions(self) -> List[Position]:
         """Return list of current positions."""
         pass

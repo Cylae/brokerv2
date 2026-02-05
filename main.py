@@ -10,9 +10,10 @@ from engine.market_utils import MarketSchedule
 from engine.notifier import Notifier
 from ai.ai_wrapper import AIWrapper
 from config import Config
+from engine.errors import ConnectionError, OrderError
 
 from engine.ib_connector import IBKRConnector
-from engine.binance_connector import BinanceConnector
+from engine.ccxt_connector import CCXTConnector
 
 # Setup logging
 logging.basicConfig(
@@ -26,9 +27,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 async def analyze_symbol(engine, risk_manager, ai, db, notifier, symbol):
-    """
-    Analyzes a single symbol.
-    """
     logger.info(f"--- Analyzing {symbol} ---")
 
     try:
@@ -38,10 +36,22 @@ async def analyze_symbol(engine, risk_manager, ai, db, notifier, symbol):
             logger.error(f"Failed to fetch market data for {symbol}")
             return
 
-        logger.info(f"Market Data ({symbol}): Last {market_data.get('last')}")
+        logger.info(f"Market Data ({symbol}): Last {market_data.last}")
 
-        # 2. AI Analysis (Async)
-        decision = await ai.analyze_and_decide(market_data)
+        # 2. AI Analysis
+        # Adapter: Convert MarketData object to dict for AI Wrapper if needed, or update AI Wrapper.
+        # AIWrapper expects dict currently. Let's convert.
+        market_data_dict = {
+            'symbol': market_data.symbol,
+            'last': market_data.last,
+            'bid': market_data.bid,
+            'ask': market_data.ask,
+            'volume': market_data.volume,
+            'timestamp': market_data.timestamp,
+            **market_data.indicators
+        }
+
+        decision = await ai.analyze_and_decide(market_data_dict)
 
         if not decision:
             logger.error(f"AI failed to return a decision for {symbol}.")
@@ -62,7 +72,7 @@ async def analyze_symbol(engine, risk_manager, ai, db, notifier, symbol):
                  return
 
             # Risk Check
-            price = market_data['last']
+            price = market_data.last
             quantity = args['quantity']
             stop_loss = args.get('stop_loss')
             take_profit = args.get('take_profit')
@@ -77,24 +87,22 @@ async def analyze_symbol(engine, risk_manager, ai, db, notifier, symbol):
                 logger.warning(f"Risk Rejected ({symbol}): {validation_msg}")
                 return
 
-            # Execute via Connector (Engine)
-            trade = await engine.execute_order(
-                symbol, action, quantity, 'MKT',
-                stop_loss=stop_loss, take_profit=take_profit
-            )
+            # Execute
+            try:
+                trade_result = await engine.execute_order(
+                    symbol, action, quantity, 'MKT',
+                    stop_loss=stop_loss, take_profit=take_profit
+                )
 
-            # Extract Order ID
-            order_id = 0
-            if hasattr(trade, 'order') and hasattr(trade.order, 'orderId'):
-                order_id = trade.order.orderId
-            elif hasattr(trade, 'id'):
-                 order_id = trade.id
-            elif hasattr(trade, 'order') and hasattr(trade.order, 'id'):
-                 order_id = trade.order.id
+                # Log & Notify
+                db.log_trade(
+                    symbol, action, quantity, price, stop_loss, take_profit, reason,
+                    trade_result.order_id
+                )
+                notifier.send_trade_alert(symbol, action, quantity, price, stop_loss, reason)
 
-            # Log & Notify
-            db.log_trade(symbol, action, quantity, price, stop_loss, take_profit, reason, order_id)
-            notifier.send_trade_alert(symbol, action, quantity, price, stop_loss, reason)
+            except OrderError as oe:
+                logger.error(f"Order Execution Failed: {oe}")
 
         elif cmd == 'hold_position':
             logger.info(f"Holding {symbol}.")
@@ -107,7 +115,6 @@ async def run_trading_cycle(engine, risk_manager, ai, db, notifier, symbols):
         logger.info("Market is CLOSED. Skipping cycle.")
         return
 
-    # Parallel Execution using gather
     tasks = [analyze_symbol(engine, risk_manager, ai, db, notifier, sym) for sym in symbols]
     await asyncio.gather(*tasks)
 
@@ -115,10 +122,14 @@ async def main():
     parser = argparse.ArgumentParser(description="Autonomous AI Trading System")
     parser.add_argument("--symbols", nargs="+", default=["AAPL", "TSLA"], help="List of symbols")
     parser.add_argument("--loop", action="store_true", help="Run in a continuous loop")
-    parser.add_argument("--mode", choices=['IBKR', 'BINANCE'], default=None, help="Trading Mode")
+    parser.add_argument("--mode", choices=['IBKR', 'CRYPTO'], default=None, help="Trading Mode")
+    parser.add_argument("--exchange", default="binance", help="Crypto Exchange (if mode=CRYPTO)")
     args = parser.parse_args()
 
     if args.mode: Config.TRADING_MODE = args.mode
+
+    # New Config for Exchange
+    Config.CRYPTO_EXCHANGE = args.exchange
 
     try:
         Config.validate()
@@ -128,8 +139,13 @@ async def main():
 
     logger.info(f"Starting System in {Config.TRADING_MODE} Mode")
 
-    if Config.TRADING_MODE == 'BINANCE':
-        connector = BinanceConnector(Config.BINANCE_API_KEY, Config.BINANCE_SECRET_KEY, Config.BINANCE_TESTNET)
+    if Config.TRADING_MODE == 'CRYPTO':
+        connector = CCXTConnector(
+            Config.BINANCE_API_KEY,
+            Config.BINANCE_SECRET_KEY,
+            exchange_id=Config.CRYPTO_EXCHANGE,
+            testnet=Config.BINANCE_TESTNET
+        )
     else:
         connector = IBKRConnector(Config.IB_HOST, Config.IB_PORT, Config.IB_CLIENT_ID)
 
@@ -142,11 +158,9 @@ async def main():
             logger.info("Connecting...")
             await connector.connect()
 
-            # Use Connector directly as 'engine' since we removed TradingEngine wrapper
-            engine = connector
-
             async def account_provider():
-                return await engine.get_account_summary()
+                summary = await connector.get_account_summary()
+                return {'NetLiquidation': summary.net_liquidation}
 
             risk_manager = RiskManager(account_provider)
 
@@ -157,7 +171,7 @@ async def main():
                     logger.error("Connection lost.")
                     break
 
-                await run_trading_cycle(engine, risk_manager, ai, db, notifier, args.symbols)
+                await run_trading_cycle(connector, risk_manager, ai, db, notifier, args.symbols)
 
                 if not args.loop:
                     return

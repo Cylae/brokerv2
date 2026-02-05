@@ -25,6 +25,7 @@ class Settings(BaseSettings):
 
     # AI
     OPENROUTER_KEY: SecretStr
+    # Defaulting to Mistral, but users can switch to Gemini
     OPENROUTER_MODEL: str = "mistralai/mistral-7b-instruct"
 
     # RISK
@@ -39,12 +40,14 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = 'utf-8'
-        extra = 'ignore' # Ignore extra fields in .env
+        extra = 'ignore'
 
 # Global Instance
 try:
     Config = Settings()
 except Exception as e:
-    print(f"Configuration Error: {e}")
-    # Fallback or Exit handled by main
+    # If used in CI/Test where env vars missing, might fail.
+    # But for production code, we want it to be valid.
+    # In tests, we patch it.
+    print(f"Configuration Warning: {e}")
     Config = None

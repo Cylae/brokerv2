@@ -19,6 +19,7 @@ class AIWrapper:
         system_prompt = PromptManager.get_system_prompt()
         user_prompt = PromptManager.format_market_data(market_data)
 
+        # Tool Definitions
         tools = [
             {
                 "type": "function",
@@ -73,6 +74,12 @@ class AIWrapper:
         ]
 
         try:
+            # Gemini Compatibility Check:
+            # Some models via OpenRouter (like Gemini) might behave better with explicit prompting
+            # if tool_choice='auto' isn't fully supported or optimized.
+            # However, OpenRouter claims OpenAI compatibility.
+            # We'll stick to standard OpenAI format.
+
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
@@ -96,13 +103,15 @@ class AIWrapper:
                     "raw_response": message
                 }
             else:
-                # self.logger.warning("AI did not use a tool. Raw content: " + str(message.content))
+                # Gemini often chats instead of calling tools if not forced.
+                # If we get text, we could try to parse it, but for safety we Default to HOLD.
+                self.logger.warning(f"AI ({self.model}) did not use a tool. Content: {message.content}")
                 return {
                     "decision": "hold_position",
-                    "args": {"symbol": market_data['symbol'], "reason": "AI returned text only."},
+                    "args": {"symbol": market_data.get('symbol', 'UNKNOWN'), "reason": f"AI ({self.model}) returned text only."},
                     "raw_response": message
                 }
 
         except Exception as e:
-            self.logger.error(f"Error calling AI: {e}")
+            self.logger.error(f"Error calling AI ({self.model}): {e}")
             return None

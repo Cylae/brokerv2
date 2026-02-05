@@ -29,7 +29,14 @@ TOOLS:
 
     @staticmethod
     def format_market_data(data):
-        # Safely handle missing keys
+        # Safely handle missing keys using .get() for ALL fields
+        symbol = data.get('symbol', 'UNKNOWN')
+        last = data.get('last', 'N/A')
+        bid = data.get('bid', 'N/A')
+        ask = data.get('ask', 'N/A')
+        volume = data.get('volume', 'N/A')
+        timestamp = data.get('timestamp', 'N/A')
+
         sma_20 = data.get('SMA_20', 'N/A')
         sma_50 = data.get('SMA_50', 'N/A')
         sma_200 = data.get('SMA_200', 'N/A')
@@ -39,13 +46,13 @@ TOOLS:
         bb_lower = data.get('BB_Lower', 'N/A')
 
         return f"""
-        MARKET DATA FOR: {data['symbol']}
+        MARKET DATA FOR: {symbol}
         ---------------------------------
         PRICE INFORMATION:
-        Last: {data['last']}
-        Bid: {data['bid']}
-        Ask: {data['ask']}
-        Volume: {data['volume']}
+        Last: {last}
+        Bid: {bid}
+        Ask: {ask}
+        Volume: {volume}
 
         TECHNICAL INDICATORS:
         SMA (20): {sma_20}
@@ -56,7 +63,7 @@ TOOLS:
         Bollinger Upper: {bb_upper}
         Bollinger Lower: {bb_lower}
 
-        Timestamp: {data['timestamp']}
+        Timestamp: {timestamp}
         ---------------------------------
 
         Analyze the Technical Indicators above.

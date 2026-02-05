@@ -8,7 +8,7 @@ The ultimate "Senior Quantitative Architect" grade trading system. It combines P
     *   **Stocks/Options:** Interactive Brokers (IBKR) via `ib_insync`.
     *   **Crypto:** Binance, Coinbase, Kraken, etc., via `ccxt`.
 *   **Unified Architecture:** A robust `BaseConnector` interface means the bot treats Apple stock and Bitcoin exactly the same.
-*   **AI-Driven Decisions:** Uses GPT-4, Mistral, or Grok to analyze technical indicators and market data.
+*   **AI-Driven Decisions:** Uses GPT-4, Mistral, **Gemini**, or Grok to analyze technical indicators and market data via OpenRouter.
 *   **Institutional Safety:**
     *   **Risk Manager:** Hard-coded limits (Max Risk 2%, Max Position 10%).
     *   **Stop Losses:** Mandatory for every trade.
@@ -19,6 +19,7 @@ The ultimate "Senior Quantitative Architect" grade trading system. It combines P
     *   **Resilience:** Auto-reconnect logic with exponential backoff.
 *   **Security:**
     *   **Web Dashboard Auth:** Protect your interface with a username/password.
+    *   **Automated SSL:** One-click script for LetsEncrypt setup.
     *   **Strict Validation:** Configuration validated via `pydantic`.
 
 ---
@@ -37,6 +38,7 @@ Follow this guide to go from "Empty Folder" to "AI Trading" safely.
 
 ### Step 2: Get Your Keys (Paper Trading ONLY!)
 *   **AI:** Go to [OpenRouter.ai](https://openrouter.ai), create an account, and generate an API Key.
+    *   *Supported Models:* `mistralai/mistral-7b-instruct`, `google/gemini-2.0-flash-exp:free`, `openai/gpt-4-turbo`.
 *   **Stocks (Optional):** Download [TWS (Trader Workstation)](https://www.interactivebrokers.com/en/trading/tws.php). Log in with your **Paper Trading** account.
     *   Go to `File -> Global Configuration -> API -> Settings`.
     *   Check **"Enable ActiveX and Socket Clients"**.
@@ -49,6 +51,7 @@ Follow this guide to go from "Empty Folder" to "AI Trading" safely.
 2.  Open `.env` and fill in your keys:
     ```env
     OPENROUTER_KEY=sk-or-v1-your-key-here
+    OPENROUTER_MODEL=google/gemini-2.0-flash-exp:free  # Optional: Switch to Gemini
 
     # Dashboard Security
     DASHBOARD_USERNAME=admin
@@ -95,7 +98,7 @@ The bot will now run forever, sleeping for 60 seconds between analysis cycles.
 
 ---
 
-## 🐧 Linux Server Deployment Guide
+## 🐧 Linux Server Deployment Guide (Pro)
 
 To run this bot on a headless Linux VPS (DigitalOcean, AWS, Linode) and access the dashboard securely:
 
@@ -120,30 +123,21 @@ WantedBy=multi-user.target
 ```
 Enable it: `sudo systemctl enable trading-bot && sudo systemctl start trading-bot`
 
-### 2. Secure the Dashboard (Nginx Reverse Proxy)
-Streamlit runs on port 8501. To access it securely over HTTPS:
+### 2. Secure the Dashboard (Automated SSL)
+We have provided a script to automatically set up Nginx and LetsEncrypt SSL.
 
-1.  **Install Nginx:** `sudo apt install nginx`
-2.  **Configure Nginx:** `sudo nano /etc/nginx/sites-available/trading-bot`
-    ```nginx
-    server {
-        listen 80;
-        server_name your-domain.com;
-
-        location / {
-            proxy_pass http://localhost:8501;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-        }
-    }
-    ```
-3.  **Enable SSL (Certbot):**
+1.  Make sure your domain (e.g., `bot.yourdomain.com`) points to your server's IP.
+2.  Run the setup script as root:
     ```bash
-    sudo apt install certbot python3-certbot-nginx
-    sudo certbot --nginx -d your-domain.com
+    sudo ./scripts/setup_ssl.sh bot.yourdomain.com
     ```
-    Now you can access `https://your-domain.com`, see the Streamlit Login screen, and enter your credentials securely.
+3.  The script will:
+    *   Install Nginx.
+    *   Configure a reverse proxy to Streamlit (Port 8501).
+    *   Request an SSL certificate from LetsEncrypt.
+    *   Redirect HTTP to HTTPS.
+
+Now access `https://bot.yourdomain.com` securely!
 
 ---
 
@@ -163,46 +157,12 @@ The heart of the system.
 
 ### 2. AI (`ai/`)
 The brain.
-*   `ai_wrapper.py`: Connects to OpenRouter using `AsyncOpenAI`. Handles Function Calling.
+*   `ai_wrapper.py`: Connects to OpenRouter using `AsyncOpenAI`. Handles Function Calling. Supports Gemini, Mistral, GPT.
 *   `prompt_manager.py`: Stores the "Senior Quant" persona and Chain-of-Thought prompts.
 
 ### 3. Dashboard (`dashboard/`)
 The eyes.
 *   `app.py`: A Streamlit web application. Supports "Unified Portfolio" view to aggregate net worth across exchanges. Secured by Login.
-
----
-
-## 🚀 Advanced Setup (Environment Variables)
-
-Full list of supported variables in `.env`:
-
-```env
-# --- GENERAL ---
-# Choose 'IBKR' or 'CRYPTO'
-TRADING_MODE=IBKR
-CRYPTO_EXCHANGE=binance
-
-# --- SECURITY ---
-DASHBOARD_USERNAME=admin
-DASHBOARD_PASSWORD=changeme
-
-# --- AI ---
-OPENROUTER_KEY=sk-or-v1-...
-OPENROUTER_MODEL=mistralai/mistral-7b-instruct
-
-# --- IBKR ---
-IB_ACCOUNT=DU12345
-IB_HOST=127.0.0.1
-IB_PORT=7497
-
-# --- CRYPTO ---
-BINANCE_API_KEY=...
-BINANCE_SECRET_KEY=...
-BINANCE_TESTNET=True
-
-# --- NOTIFICATIONS ---
-DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
-```
 
 ---
 
@@ -221,4 +181,4 @@ To verify the system integrity, run the test suite:
 ```bash
 python -m pytest
 ```
-This runs ~20 tests covering connection logic, AI reasoning, risk management, and order execution mocks.
+This runs ~20 tests covering connection logic, AI reasoning (including Gemini format), risk management, and order execution mocks.

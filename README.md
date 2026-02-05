@@ -17,7 +17,9 @@ The ultimate "Senior Quantitative Architect" grade trading system. It combines P
     *   **Database:** SQLite persistence for trade history.
     *   **Notifications:** Real-time Discord alerts.
     *   **Resilience:** Auto-reconnect logic with exponential backoff.
-*   **Configuration:** Strict validation using `pydantic`.
+*   **Security:**
+    *   **Web Dashboard Auth:** Protect your interface with a username/password.
+    *   **Strict Validation:** Configuration validated via `pydantic`.
 
 ---
 
@@ -48,6 +50,10 @@ Follow this guide to go from "Empty Folder" to "AI Trading" safely.
     ```env
     OPENROUTER_KEY=sk-or-v1-your-key-here
 
+    # Dashboard Security
+    DASHBOARD_USERNAME=admin
+    DASHBOARD_PASSWORD=securepassword123
+
     # If trading stocks:
     IB_ACCOUNT=DU12345
     IB_PORT=7497
@@ -65,8 +71,9 @@ python easy_start.py
 ```
 1.  Select **Option 1 (Launch Dashboard)**.
 2.  A web page will open.
-3.  On the sidebar, select **Trading Mode** (e.g., "Crypto").
-4.  Click **Connect**. You should see a green "Connected" message.
+3.  **Login** with the username/password you set in Step 3.
+4.  On the sidebar, select **Trading Mode** (e.g., "Crypto").
+5.  Click **Connect**. You should see a green "Connected" message.
 
 ### Step 5: Execute an AI Trade (Manual Trigger)
 1.  In the Dashboard, enter a symbol (e.g., `BTC/USDT` or `AAPL`).
@@ -85,6 +92,58 @@ Once you trust the system, run it in a loop from the command line:
 python main.py --mode CRYPTO --symbols BTC/USDT ETH/USDT --loop
 ```
 The bot will now run forever, sleeping for 60 seconds between analysis cycles.
+
+---
+
+## 🐧 Linux Server Deployment Guide
+
+To run this bot on a headless Linux VPS (DigitalOcean, AWS, Linode) and access the dashboard securely:
+
+### 1. Run as a Background Service (systemd)
+Create a service file to keep the bot running automatically.
+
+`sudo nano /etc/systemd/system/trading-bot.service`
+
+```ini
+[Unit]
+Description=AI Trading Bot
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/path/to/trading-system
+ExecStart=/usr/bin/python3 main.py --mode CRYPTO --loop
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+Enable it: `sudo systemctl enable trading-bot && sudo systemctl start trading-bot`
+
+### 2. Secure the Dashboard (Nginx Reverse Proxy)
+Streamlit runs on port 8501. To access it securely over HTTPS:
+
+1.  **Install Nginx:** `sudo apt install nginx`
+2.  **Configure Nginx:** `sudo nano /etc/nginx/sites-available/trading-bot`
+    ```nginx
+    server {
+        listen 80;
+        server_name your-domain.com;
+
+        location / {
+            proxy_pass http://localhost:8501;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+    }
+    ```
+3.  **Enable SSL (Certbot):**
+    ```bash
+    sudo apt install certbot python3-certbot-nginx
+    sudo certbot --nginx -d your-domain.com
+    ```
+    Now you can access `https://your-domain.com`, see the Streamlit Login screen, and enter your credentials securely.
 
 ---
 
@@ -109,7 +168,7 @@ The brain.
 
 ### 3. Dashboard (`dashboard/`)
 The eyes.
-*   `app.py`: A Streamlit web application. Supports "Unified Portfolio" view to aggregate net worth across exchanges.
+*   `app.py`: A Streamlit web application. Supports "Unified Portfolio" view to aggregate net worth across exchanges. Secured by Login.
 
 ---
 
@@ -122,6 +181,10 @@ Full list of supported variables in `.env`:
 # Choose 'IBKR' or 'CRYPTO'
 TRADING_MODE=IBKR
 CRYPTO_EXCHANGE=binance
+
+# --- SECURITY ---
+DASHBOARD_USERNAME=admin
+DASHBOARD_PASSWORD=changeme
 
 # --- AI ---
 OPENROUTER_KEY=sk-or-v1-...

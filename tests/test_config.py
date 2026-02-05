@@ -11,6 +11,16 @@ def test_config_validation():
     assert settings.OPENROUTER_KEY.get_secret_value() == 'sk-test'
     assert settings.IB_PORT == 7497
 
+def test_config_dashboard_auth():
+    from config import Settings
+    os.environ['DASHBOARD_USERNAME'] = 'admin'
+    os.environ['DASHBOARD_PASSWORD'] = 'secret'
+    os.environ['OPENROUTER_KEY'] = 'sk-test'
+
+    settings = Settings()
+    assert settings.DASHBOARD_USERNAME == 'admin'
+    assert settings.DASHBOARD_PASSWORD.get_secret_value() == 'secret'
+
 def test_config_missing_required():
     from config import Settings
     if 'OPENROUTER_KEY' in os.environ:

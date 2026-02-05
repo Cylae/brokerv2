@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     TRADING_MODE: Literal['IBKR', 'CRYPTO', 'BINANCE'] = "IBKR"
     CRYPTO_EXCHANGE: str = "binance"
 
+    # DASHBOARD SECURITY
+    DASHBOARD_USERNAME: Optional[str] = Field(default=None, description="Username for Web Dashboard")
+    DASHBOARD_PASSWORD: Optional[SecretStr] = Field(default=None, description="Password for Web Dashboard")
+
     # IBKR
     IB_ACCOUNT: str = Field(default="DU12345", description="IBKR Account ID")
     IB_HOST: str = "127.0.0.1"

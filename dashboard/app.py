@@ -13,12 +13,53 @@ from ai.ai_wrapper import AIWrapper
 from config import Config
 
 st.set_page_config(page_title="AI Trading System", layout="wide")
+
+# --- AUTHENTICATION LOGIC ---
+def check_login():
+    """Returns True if authenticated or no auth required."""
+    if not Config or not Config.DASHBOARD_USERNAME or not Config.DASHBOARD_PASSWORD:
+        return True # No Auth configured
+
+    if 'authenticated' not in st.session_state:
+        st.session_state.authenticated = False
+
+    if st.session_state.authenticated:
+        return True
+
+    # Show Login Form
+    st.title("🔐 Login Required")
+
+    with st.form("login_form"):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
+
+        if submitted:
+            if username == Config.DASHBOARD_USERNAME and password == Config.DASHBOARD_PASSWORD.get_secret_value():
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Invalid credentials")
+
+    return False
+
+# Stop execution if not logged in
+if not check_login():
+    st.stop()
+
+# --- MAIN APP ---
 st.title("🤖 Autonomous Multi-Model AI Trading System")
 
 st.sidebar.header("Configuration")
 
 # Trading Mode
 trading_mode = st.sidebar.radio("Trading Mode", ("IBKR (Stocks)", "Crypto (Generic)", "Unified Portfolio"))
+
+# Logout Button (Only if auth enabled)
+if Config and Config.DASHBOARD_USERNAME:
+    if st.sidebar.button("Logout"):
+        st.session_state.authenticated = False
+        st.rerun()
 
 api_key = st.sidebar.text_input("OpenRouter API Key", type="password", value=Config.OPENROUTER_KEY.get_secret_value() if Config and Config.OPENROUTER_KEY else "")
 model = st.sidebar.text_input("AI Model", value=Config.OPENROUTER_MODEL if Config else "mistralai/mistral-7b-instruct")
@@ -168,6 +209,7 @@ else:
                 positions = loop.run_until_complete(engine.get_positions())
                 if positions:
                     st.write("Positions:")
+                    # Convert list of Position objects to Dict for DataFrame
                     pos_data = [
                         {"Symbol": p.symbol, "Quantity": p.quantity, "Avg Cost": p.avg_cost}
                         for p in positions
@@ -178,77 +220,78 @@ else:
             except Exception as e:
                 st.error(f"Error fetching account data: {e}")
 
-        st.header("3. AI Auto-Trade")
-        default_sym = "AAPL" if st.session_state.mode == 'IBKR' else "BTC/USDT"
-        symbol = st.text_input("Symbol to Analyze", value=default_sym)
+    st.header("3. AI Auto-Trade")
+    default_sym = "AAPL" if st.session_state.mode == 'IBKR' else "BTC/USDT"
+    symbol = st.text_input("Symbol to Analyze", value=default_sym)
 
-        if st.button("Analyze & Execute"):
-            if not api_key:
-                st.error("Please provide OpenRouter API Key")
-            else:
-                log(f"Starting analysis for {symbol}...")
-                with st.spinner("Fetching Market Data..."):
-                    try:
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
+    if st.button("Analyze & Execute"):
+        if not api_key:
+            st.error("Please provide OpenRouter API Key")
+        else:
+            log(f"Starting analysis for {symbol}...")
+            with st.spinner("Fetching Market Data..."):
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
 
-                        market_data = loop.run_until_complete(engine.get_market_data(symbol))
+                    market_data = loop.run_until_complete(engine.get_market_data(symbol))
 
-                        if market_data:
-                            st.subheader(f"Market Data: {symbol}")
-                            col_price, col_tech = st.columns(2)
-                            with col_price:
-                                st.metric("Last Price", market_data.last)
-                                st.metric("Volume", market_data.volume)
+                    if market_data:
+                        st.subheader(f"Market Data: {symbol}")
+                        col_price, col_tech = st.columns(2)
+                        with col_price:
+                            st.metric("Last Price", market_data.last)
+                            st.metric("Volume", market_data.volume)
 
-                            with col_tech:
-                                inds = market_data.indicators
-                                st.write("**Indicators**")
-                                st.write(f"SMA 20: {inds.get('SMA_20', 'N/A')}")
-                                st.write(f"RSI: {inds.get('RSI', 'N/A')}")
-                                st.write(f"MACD: {inds.get('MACD', 'N/A')}")
+                        with col_tech:
+                            inds = market_data.indicators
+                            st.write("**Indicators**")
+                            st.write(f"SMA 20: {inds.get('SMA_20', 'N/A')}")
+                            st.write(f"RSI: {inds.get('RSI', 'N/A')}")
+                            st.write(f"MACD: {inds.get('MACD', 'N/A')}")
 
-                            ai = AIWrapper(api_key, model)
+                        ai = AIWrapper(api_key, model)
 
-                            md_dict = {
-                                'symbol': market_data.symbol,
-                                'last': market_data.last,
-                                'bid': market_data.bid,
-                                'ask': market_data.ask,
-                                'volume': market_data.volume,
-                                'timestamp': market_data.timestamp,
-                                **market_data.indicators
-                            }
+                        # Prepare dict for AI
+                        md_dict = {
+                            'symbol': market_data.symbol,
+                            'last': market_data.last,
+                            'bid': market_data.bid,
+                            'ask': market_data.ask,
+                            'volume': market_data.volume,
+                            'timestamp': market_data.timestamp,
+                            **market_data.indicators
+                        }
 
-                            with st.spinner("AI Thinking..."):
-                                decision = loop.run_until_complete(ai.analyze_and_decide(md_dict))
+                        with st.spinner("AI Thinking..."):
+                            decision = loop.run_until_complete(ai.analyze_and_decide(md_dict))
 
-                            if decision:
-                                st.subheader("AI Decision")
-                                st.write(f"**Action:** {decision['decision']}")
-                                st.write(f"**Reason:** {decision['args'].get('reason', 'No reason')}")
-                                log(f"AI Decision: {decision['decision']}")
+                        if decision:
+                            st.subheader("AI Decision")
+                            st.write(f"**Action:** {decision['decision']}")
+                            st.write(f"**Reason:** {decision['args'].get('reason', 'No reason')}")
+                            log(f"AI Decision: {decision['decision']}")
 
-                                cmd = decision['decision']
-                                args = decision['args']
+                            cmd = decision['decision']
+                            args = decision['args']
 
-                                if cmd in ['buy_stock', 'sell_stock']:
-                                    with st.spinner("Executing Order..."):
-                                        action = 'BUY' if cmd == 'buy_stock' else 'SELL'
-                                        res = loop.run_until_complete(engine.execute_order(
-                                            args['symbol'], action, args['quantity'], 'MKT',
-                                            stop_loss=args.get('stop_loss'),
-                                            take_profit=args.get('take_profit')
-                                        ))
-                                        st.success(f"Order {res.order_id} Placed: {res.status}")
-                                        log(f"{action} {args['quantity']} {args['symbol']}")
-                                else:
-                                    st.info("Holding position.")
-                        else:
-                            st.error("Failed to fetch market data.")
-                    except Exception as e:
-                         st.error(f"Error during execution: {e}")
-                         log(f"Error: {e}")
+                            if cmd in ['buy_stock', 'sell_stock']:
+                                with st.spinner("Executing Order..."):
+                                    action = 'BUY' if cmd == 'buy_stock' else 'SELL'
+                                    res = loop.run_until_complete(engine.execute_order(
+                                        args['symbol'], action, args['quantity'], 'MKT',
+                                        stop_loss=args.get('stop_loss'),
+                                        take_profit=args.get('take_profit')
+                                    ))
+                                    st.success(f"Order {res.order_id} Placed: {res.status}")
+                                    log(f"{action} {args['quantity']} {args['symbol']}")
+                            else:
+                                st.info("Holding position.")
+                    else:
+                        st.error("Failed to fetch market data.")
+                except Exception as e:
+                     st.error(f"Error during execution: {e}")
+                     log(f"Error: {e}")
 
     st.header("4. System Logs")
     for l in reversed(st.session_state.logs):

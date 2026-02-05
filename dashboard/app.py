@@ -8,7 +8,8 @@ from datetime import datetime
 # Add root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from engine.ib_connector import IBConnector
+from engine.ib_connector import IBKRConnector
+from engine.binance_connector import BinanceConnector
 from engine.trading_engine import TradingEngine
 from ai.ai_wrapper import AIWrapper
 from config import Config
@@ -22,14 +23,56 @@ st.title("🤖 Autonomous Multi-Model AI Trading System")
 
 # Sidebar for Config
 st.sidebar.header("Configuration")
-api_key = st.sidebar.text_input("OpenRouter API Key", type="password", value=Config.OPENROUTER_API_KEY)
-model = st.sidebar.text_input("Model", value=Config.OPENROUTER_MODEL)
-ib_host = st.sidebar.text_input("IB Host", value=Config.IB_HOST)
-ib_port = st.sidebar.number_input("IB Port", value=Config.IB_PORT)
-client_id = st.sidebar.number_input("Client ID", value=Config.IB_CLIENT_ID)
 
-if 'ib_connector' not in st.session_state:
-    st.session_state.ib_connector = None
+# 1. Trading Mode Selector
+trading_mode = st.sidebar.radio("Trading Mode", ("IBKR (Stocks)", "Binance (Crypto)"))
+
+api_key = st.sidebar.text_input("OpenRouter API Key", type="password", value=Config.OPENROUTER_API_KEY)
+model = st.sidebar.text_input("AI Model", value=Config.OPENROUTER_MODEL)
+
+connector = None
+
+# Conditional Inputs
+if trading_mode == "IBKR (Stocks)":
+    st.sidebar.subheader("IBKR Settings")
+    ib_host = st.sidebar.text_input("IB Host", value=Config.IB_HOST)
+    ib_port = st.sidebar.number_input("IB Port", value=Config.IB_PORT)
+    client_id = st.sidebar.number_input("Client ID", value=Config.IB_CLIENT_ID)
+
+    if st.button("Connect to IBKR"):
+        try:
+            connector = IBKRConnector(host=ib_host, port=ib_port, client_id=client_id)
+            # IB Connection logic...
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(connector.connect())
+            st.session_state.connector = connector
+            st.session_state.mode = 'IBKR'
+            st.success("Connected to IBKR")
+        except Exception as e:
+            st.error(f"IBKR Connection failed: {e}")
+
+else: # Binance
+    st.sidebar.subheader("Binance Settings")
+    bin_key = st.sidebar.text_input("Binance API Key", value=Config.BINANCE_API_KEY, type="password")
+    bin_secret = st.sidebar.text_input("Binance Secret", value=Config.BINANCE_SECRET_KEY, type="password")
+    testnet = st.sidebar.checkbox("Testnet", value=Config.BINANCE_TESTNET)
+
+    if st.button("Connect to Binance"):
+        try:
+            connector = BinanceConnector(api_key=bin_key, secret_key=bin_secret, testnet=testnet)
+            # Binance Connection logic...
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(connector.connect())
+            st.session_state.connector = connector
+            st.session_state.mode = 'BINANCE'
+            st.success("Connected to Binance")
+        except Exception as e:
+            st.error(f"Binance Connection failed: {e}")
+
+if 'connector' not in st.session_state:
+    st.session_state.connector = None
 if 'trading_engine' not in st.session_state:
     st.session_state.trading_engine = None
 if 'logs' not in st.session_state:
@@ -39,41 +82,24 @@ def log(message):
     timestamp = datetime.now().strftime("%H:%M:%S")
     st.session_state.logs.append(f"[{timestamp}] {message}")
 
-# Connection Section
-st.header("1. Connection Status")
-col1, col2 = st.columns(2)
+# Main Logic
+if st.session_state.connector:
+    if st.session_state.connector.connected: # Simple check
+        st.session_state.trading_engine = TradingEngine(st.session_state.connector)
 
-with col1:
-    if st.button("Connect to IBKR"):
-        try:
-            connector = IBConnector(host=ib_host, port=ib_port, client_id=client_id)
-
+        # Disconnect Button
+        if st.sidebar.button("Disconnect"):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(connector.connect())
-
-            st.session_state.ib_connector = connector
-            st.session_state.trading_engine = TradingEngine(connector)
-            st.success("Connected to IBKR")
-            log("Connected to IBKR")
-
-        except Exception as e:
-            st.error(f"Connection failed: {e}")
-            log(f"Connection failed: {e}")
-
-with col2:
-    if st.session_state.ib_connector:
-        st.write("Status: **Connected**")
-        if st.button("Disconnect"):
-            st.session_state.ib_connector.disconnect()
-            st.session_state.ib_connector = None
+            loop.run_until_complete(st.session_state.connector.disconnect())
+            st.session_state.connector = None
             st.session_state.trading_engine = None
-            st.warning("Disconnected")
-            log("Disconnected")
-    else:
-        st.write("Status: **Disconnected**")
+            st.experimental_rerun()
 
-# Main Dashboard
+    else:
+        st.warning("Connector initialized but not connected.")
+
+# Dashboard View
 if st.session_state.trading_engine:
     engine = st.session_state.trading_engine
 
@@ -81,10 +107,13 @@ if st.session_state.trading_engine:
     st.header("2. Account Summary")
     if st.button("Refresh Account"):
         try:
-            summary = engine.ib.run(engine.get_account_summary())
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+            summary = loop.run_until_complete(engine.get_account_summary())
             st.json(summary)
 
-            positions = engine.ib.run(engine.get_positions())
+            positions = loop.run_until_complete(engine.get_positions())
             if positions:
                 st.write("Positions:")
                 st.dataframe(pd.DataFrame(positions))
@@ -95,7 +124,8 @@ if st.session_state.trading_engine:
 
     # Trading Section
     st.header("3. AI Auto-Trade")
-    symbol = st.text_input("Symbol to Analyze", value="AAPL")
+    default_sym = "AAPL" if st.session_state.mode == 'IBKR' else "BTC/USDT"
+    symbol = st.text_input("Symbol to Analyze", value=default_sym)
 
     if st.button("Analyze & Execute"):
         if not api_key:
@@ -104,13 +134,15 @@ if st.session_state.trading_engine:
             log(f"Starting analysis for {symbol}...")
             with st.spinner("Fetching Market Data..."):
                 try:
-                    # Fetch rich market data (Snapshot + Historical)
-                    market_data = engine.ib.run(engine.get_market_data(symbol))
+                    # New Loop for this action to avoid conflicts
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+
+                    market_data = loop.run_until_complete(engine.get_market_data(symbol))
 
                     if market_data:
                         # Display Data & Indicators
-                        st.subheader(f"Market Data & Technicals: {symbol}")
-
+                        st.subheader(f"Market Data: {symbol}")
                         col_price, col_tech = st.columns(2)
                         with col_price:
                             st.metric("Last Price", market_data.get('last'))
@@ -119,24 +151,20 @@ if st.session_state.trading_engine:
                         with col_tech:
                             st.write("**Indicators**")
                             st.write(f"SMA 20: {market_data.get('SMA_20', 'N/A')}")
-                            st.write(f"SMA 50: {market_data.get('SMA_50', 'N/A')}")
                             st.write(f"RSI: {market_data.get('RSI', 'N/A')}")
                             st.write(f"MACD: {market_data.get('MACD', 'N/A')}")
                             st.write(f"Bollinger: {market_data.get('BB_Upper', 'N/A')} / {market_data.get('BB_Lower', 'N/A')}")
 
-                        st.json(market_data)
-
                         ai = AIWrapper(api_key, model)
-                        with st.spinner("AI Thinking (Technical Analysis)..."):
+                        with st.spinner("AI Thinking..."):
                             decision = ai.analyze_and_decide(market_data)
 
                         if decision:
                             st.subheader("AI Decision")
                             st.write(f"**Action:** {decision['decision']}")
                             st.write(f"**Reason:** {decision['args'].get('reason', 'No reason provided')}")
-                            st.write(f"**Quantity:** {decision['args'].get('quantity', 'N/A')}")
 
-                            log(f"AI Decision for {symbol}: {decision['decision']}")
+                            log(f"AI Decision: {decision['decision']}")
 
                             # Execution Logic
                             cmd = decision['decision']
@@ -144,20 +172,27 @@ if st.session_state.trading_engine:
 
                             if cmd == 'buy_stock':
                                 with st.spinner("Executing Buy Order..."):
-                                    trade = engine.ib.run(engine.execute_order(args['symbol'], 'BUY', args['quantity'], 'MKT'))
-                                    st.success(f"Buy Order Placed: {trade}")
+                                    # Need explicit loop run
+                                    loop.run_until_complete(engine.execute_order(
+                                        args['symbol'], 'BUY', args['quantity'], 'MKT',
+                                        stop_loss=args.get('stop_loss'),
+                                        take_profit=args.get('take_profit')
+                                    ))
+                                    st.success(f"Buy Order Placed for {args['symbol']}")
                                     log(f"Buy Order Placed: {args['quantity']} {args['symbol']}")
 
                             elif cmd == 'sell_stock':
                                 with st.spinner("Executing Sell Order..."):
-                                    trade = engine.ib.run(engine.execute_order(args['symbol'], 'SELL', args['quantity'], 'MKT'))
-                                    st.success(f"Sell Order Placed: {trade}")
+                                    loop.run_until_complete(engine.execute_order(
+                                        args['symbol'], 'SELL', args['quantity'], 'MKT',
+                                        stop_loss=args.get('stop_loss')
+                                    ))
+                                    st.success(f"Sell Order Placed for {args['symbol']}")
                                     log(f"Sell Order Placed: {args['quantity']} {args['symbol']}")
 
                             elif cmd == 'hold_position':
-                                st.info("Holding position. No order placed.")
+                                st.info("Holding position.")
                                 log(f"Hold decision for {symbol}")
-
                         else:
                             st.error("AI failed to make a decision.")
                     else:

@@ -4,7 +4,6 @@ import argparse
 import sys
 import os
 
-from engine.ib_connector import IBConnector
 from engine.trading_engine import TradingEngine
 from engine.risk_manager import RiskManager
 from engine.db_manager import DatabaseManager
@@ -12,6 +11,10 @@ from engine.market_utils import MarketSchedule
 from engine.notifier import Notifier
 from ai.ai_wrapper import AIWrapper
 from config import Config
+
+# Connectors
+from engine.ib_connector import IBKRConnector
+from engine.binance_connector import BinanceConnector
 
 # Setup logging
 logging.basicConfig(
@@ -25,7 +28,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 async def run_trading_cycle(engine, risk_manager, ai, db, notifier, symbols):
-    # Check Market Hours
     if not MarketSchedule.is_market_open():
         logger.info("Market is CLOSED. Skipping analysis.")
         return
@@ -49,9 +51,13 @@ async def run_trading_cycle(engine, risk_manager, ai, db, notifier, symbols):
             args = decision['args']
 
             try:
+                # Basic Normalization for verification logic
+                dec_symbol = args['symbol'].upper().replace('/', '')
+                target_symbol = symbol.upper().replace('/', '')
+
                 if cmd == 'buy_stock':
                     # Validate symbol matches
-                    if args['symbol'].upper() != symbol.upper():
+                    if dec_symbol not in target_symbol and target_symbol not in dec_symbol:
                         logger.warning(f"AI tried to buy {args['symbol']} but we are analyzing {symbol}. Ignoring mismatch.")
                         continue
 
@@ -71,12 +77,16 @@ async def run_trading_cycle(engine, risk_manager, ai, db, notifier, symbols):
                         continue
 
                     trade = await engine.execute_order(
-                        args['symbol'], 'BUY', quantity, 'MKT',
+                        symbol, 'BUY', quantity, 'MKT', # Use original symbol
                         stop_loss=stop_loss, take_profit=take_profit
                     )
 
-                    # Get Order ID (Note: Trade object might not have orderId immediately populated in some contexts, but usually yes)
-                    order_id = trade.order.orderId
+                    # Get Order ID
+                    order_id = 0
+                    if hasattr(trade, 'order') and hasattr(trade.order, 'orderId'):
+                        order_id = trade.order.orderId
+                    elif hasattr(trade, 'id'): # Generic object from Binance
+                         order_id = trade.id
 
                     # Log to DB
                     db.log_trade(symbol, 'BUY', quantity, price, stop_loss, take_profit, reason, order_id)
@@ -85,12 +95,11 @@ async def run_trading_cycle(engine, risk_manager, ai, db, notifier, symbols):
                     notifier.send_trade_alert(symbol, 'BUY', quantity, price, stop_loss, reason)
 
                 elif cmd == 'sell_stock':
-                    if args['symbol'].upper() != symbol.upper():
+                    if dec_symbol not in target_symbol and target_symbol not in dec_symbol:
                         logger.warning(f"AI tried to sell {args['symbol']} but we are analyzing {symbol}. Ignoring mismatch.")
                         continue
 
-                    # TODO: Implement full sell logic/short logic
-                    await engine.execute_order(args['symbol'], 'SELL', args['quantity'], 'MKT', stop_loss=args.get('stop_loss'))
+                    await engine.execute_order(symbol, 'SELL', args['quantity'], 'MKT', stop_loss=args.get('stop_loss'))
 
                 elif cmd == 'hold_position':
                     logger.info("Holding position.")
@@ -102,9 +111,14 @@ async def run_trading_cycle(engine, risk_manager, ai, db, notifier, symbols):
 
 async def main():
     parser = argparse.ArgumentParser(description="Autonomous AI Trading System")
-    parser.add_argument("--symbols", nargs="+", default=["AAPL", "TSLA", "NVDA"], help="List of symbols to trade")
+    parser.add_argument("--symbols", nargs="+", default=["AAPL", "TSLA"], help="List of symbols to trade")
     parser.add_argument("--loop", action="store_true", help="Run in a continuous loop")
+    parser.add_argument("--mode", choices=['IBKR', 'BINANCE'], default=None, help="Trading Mode")
     args = parser.parse_args()
+
+    # Override Config mode if arg provided
+    if args.mode:
+        Config.TRADING_MODE = args.mode
 
     # Validate Config
     try:
@@ -113,20 +127,33 @@ async def main():
         logger.error(e)
         sys.exit(1)
 
-    # Initialize Components
-    connector = IBConnector(host=Config.IB_HOST, port=Config.IB_PORT, client_id=Config.IB_CLIENT_ID)
+    logger.info(f"Starting System in {Config.TRADING_MODE} Mode")
+
+    # Initialize Connector based on Mode
+    if Config.TRADING_MODE == 'BINANCE':
+        connector = BinanceConnector(
+            api_key=Config.BINANCE_API_KEY,
+            secret_key=Config.BINANCE_SECRET_KEY,
+            testnet=Config.BINANCE_TESTNET
+        )
+    else:
+        connector = IBKRConnector(
+            host=Config.IB_HOST,
+            port=Config.IB_PORT,
+            client_id=Config.IB_CLIENT_ID
+        )
+
     ai = AIWrapper(api_key=Config.OPENROUTER_API_KEY, model=Config.OPENROUTER_MODEL)
     db = DatabaseManager()
     notifier = Notifier()
 
-    # Connection Loop with Backoff
+    # Connection Loop
     while True:
         try:
-            logger.info("Connecting to IBKR...")
+            logger.info("Connecting to Exchange...")
             await connector.connect()
             engine = TradingEngine(connector)
 
-            # Helper to fetch account data for Risk Manager
             async def account_provider():
                 return await engine.get_account_summary()
 
@@ -137,7 +164,7 @@ async def main():
             while True:
                 if not await connector.check_connection():
                     logger.error("Connection lost. Reconnecting...")
-                    break # Break inner loop to re-connect
+                    break
 
                 await run_trading_cycle(engine, risk_manager, ai, db, notifier, args.symbols)
 
@@ -155,7 +182,7 @@ async def main():
             logger.info("Restarting in 10 seconds...")
             await asyncio.sleep(10)
         finally:
-             connector.disconnect()
+             await connector.disconnect()
 
 if __name__ == "__main__":
     asyncio.run(main())

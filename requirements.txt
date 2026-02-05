@@ -6,3 +6,5 @@ pytest-asyncio
 pandas
 python-dotenv
 watchdog
+requests
+ccxt

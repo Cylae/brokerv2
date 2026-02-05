@@ -6,9 +6,21 @@ import os
 # Add root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from engine.ib_connector import IBConnector
+from engine.ib_connector import IBKRConnector
 from engine.trading_engine import TradingEngine
 from ai.ai_wrapper import AIWrapper
+from engine.db_manager import DatabaseManager
+
+TEST_DB = "test_trading.db"
+
+@pytest.fixture
+def db():
+    if os.path.exists(TEST_DB):
+        os.remove(TEST_DB)
+    manager = DatabaseManager(TEST_DB)
+    yield manager
+    if os.path.exists(TEST_DB):
+        os.remove(TEST_DB)
 
 @pytest.fixture
 def mock_ib():
@@ -19,11 +31,12 @@ def mock_ib():
     ib.qualifyContractsAsync = AsyncMock()
     ib.reqMktData = MagicMock()
     ib.placeOrder = MagicMock()
+    ib.reqHistoricalDataAsync = AsyncMock(return_value=[])
     return ib
 
 @pytest.fixture
 def mock_ib_connector(mock_ib):
-    connector = IBConnector()
+    connector = IBKRConnector()
     connector.ib = mock_ib
     return connector
 

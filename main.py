@@ -97,7 +97,7 @@ async def analyze_symbol(engine, risk_manager, ai, db, notifier, symbol):
                     symbol, action, quantity, price, stop_loss, take_profit, reason,
                     trade_result.order_id
                 )
-                notifier.send_trade_alert(symbol, action, quantity, price, stop_loss, reason)
+                await notifier.send_trade_alert(symbol, action, quantity, price, stop_loss, reason)
 
             except OrderError as oe:
                 logger.error(f"Order Execution Failed: {oe}")

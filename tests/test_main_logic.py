@@ -36,6 +36,7 @@ async def test_analyze_symbol_flow():
 
     mock_db = MagicMock()
     mock_notifier = MagicMock()
+    mock_notifier.send_trade_alert = AsyncMock()
 
     # Run Single Symbol Analysis
     await analyze_symbol(mock_engine, mock_risk_manager, mock_ai, mock_db, mock_notifier, 'AAPL')
@@ -46,4 +47,4 @@ async def test_analyze_symbol_flow():
     mock_risk_manager.validate_trade.assert_awaited_once()
     mock_engine.execute_order.assert_awaited_once()
     mock_db.log_trade.assert_called_once()
-    mock_notifier.send_trade_alert.assert_called_once()
+    mock_notifier.send_trade_alert.assert_awaited_once()

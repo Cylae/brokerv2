@@ -40,6 +40,29 @@ You will see a menu:
 
 ---
 
+## 🛡️ Advanced Features: Safety & Strategy
+
+This is not just a random trading bot. It mimics a professional trading desk setup:
+
+### 1. The "Senior Quant" AI Strategy
+The AI doesn't just guess. It is programmed with a "Hedge Fund Manager" persona that uses **Chain of Thought** reasoning.
+*   **Technical Analysis:** It calculates and checks indicators like **RSI** (Momentum), **MACD** (Trend), **SMA** (Moving Averages), and **Bollinger Bands** (Volatility).
+*   **Data-Driven:** It analyzes real historical data, not just the current price.
+
+### 2. Built-in Risk Management (The "Safety Net")
+We have programmed strict rules that the AI *cannot* break, even if it wants to.
+*   **Max Risk Per Trade:** The bot calculates the dollar risk based on the Stop Loss. If a trade risks more than **2%** of your account, it is **rejected automatically**.
+*   **Position Sizing:** It will never put more than **10%** of your account into a single stock.
+*   **Mandatory Stop Loss:** Every single trade MUST have a Stop Loss price defined. No "holding and hoping".
+
+### 3. Bracket Orders
+When the bot buys a stock, it sends a **Bracket Order**. This means it sends 3 orders at once:
+1.  **Entry Order:** "Buy Apple at Market Price".
+2.  **Stop Loss:** "Sell if price drops to $X" (Protects you from crashing).
+3.  **Take Profit:** "Sell if price rises to $Y" (Locks in your gains).
+
+---
+
 ## 📚 Beginner's Guide
 
 ### What is "Paper Trading"?

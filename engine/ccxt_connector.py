@@ -48,9 +48,9 @@ class CCXTConnector(BaseConnector):
         return self.connected
 
     async def get_market_data(self, symbol: str) -> Optional[MarketData]:
-        # Standardization Logic
-        if '/' not in symbol and len(symbol) <= 5:
-                symbol = f"{symbol}/USDT"
+        # Standardization Logic: Append /USDT only if no pair is specified
+        if '/' not in symbol:
+            symbol = f"{symbol}/USDT"
 
         try:
             # Concurrent Fetch
@@ -138,12 +138,17 @@ class CCXTConnector(BaseConnector):
     async def get_account_summary(self) -> AccountSummary:
         try:
             balance = await self.exchange.fetch_balance()
-            # Approximation for total equity in base currency (USDT usually)
-            total = float(balance.get('total', {}).get('USDT', 0))
+            total_equity = 0.0
+
+            # Sum up major stablecoins and USD to get "Net Liquidation" approximation
+            # This is a simplification. Ideally, we'd fetch ticker prices for all assets and sum them up.
+            for currency in ['USD', 'USDT', 'USDC', 'EUR']:
+                 total_equity += float(balance.get('total', {}).get(currency, 0))
+
             return AccountSummary(
-                net_liquidation=total,
-                total_cash=total,
-                currency="USDT"
+                net_liquidation=total_equity,
+                total_cash=total_equity,
+                currency="USD" # Reporting in USD equivalent
             )
         except Exception as e:
             self.logger.error(f"Error fetching balance: {e}")
@@ -154,7 +159,8 @@ class CCXTConnector(BaseConnector):
             balance = await self.exchange.fetch_balance()
             positions = []
             for asset, amount in balance.get('total', {}).items():
-                if amount > 0 and asset != 'USDT':
+                # Filter out dust and standard quote currencies to show only "Positions"
+                if amount > 0.00000001 and asset not in ['USD', 'USDT', 'USDC']:
                     positions.append(Position(
                         symbol=asset,
                         quantity=amount,

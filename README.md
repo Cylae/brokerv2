@@ -6,17 +6,18 @@ The ultimate "Senior Quantitative Architect" grade trading system. It combines P
 
 *   **Universal Connectivity:**
     *   **Stocks/Options:** Interactive Brokers (IBKR) via `ib_insync`.
-    *   **Crypto:** Binance, Coinbase, Kraken, etc., via `ccxt`.
+    *   **Crypto:** Binance, Coinbase, Kraken, KuCoin, and 100+ others via `ccxt`.
 *   **Unified Architecture:** A robust `BaseConnector` interface means the bot treats Apple stock and Bitcoin exactly the same.
 *   **AI-Driven Decisions:** Uses GPT-4, Mistral, **Gemini**, or Grok to analyze technical indicators and market data via OpenRouter.
 *   **Institutional Safety:**
     *   **Risk Manager:** Hard-coded limits (Max Risk 2%, Max Position 10%).
+    *   **Hallucination Protection:** Strictly validates that the AI is trading the correct symbol.
     *   **Stop Losses:** Mandatory for every trade.
     *   **Market Hours:** Respects NYSE hours for stocks, runs 24/7 for crypto.
 *   **Production Ready:**
     *   **Database:** SQLite persistence for trade history.
     *   **Notifications:** Real-time Discord alerts.
-    *   **Resilience:** Auto-reconnect logic with exponential backoff.
+    *   **Resilience:** Auto-reconnect logic and JSON fallback parsing for AI models.
 *   **Security:**
     *   **Web Dashboard Auth:** Protect your interface with a username/password.
     *   **Automated SSL:** One-click script for LetsEncrypt setup.
@@ -65,6 +66,7 @@ Follow this guide to go from "Empty Folder" to "AI Trading" safely.
     BINANCE_API_KEY=your-api-key
     BINANCE_SECRET_KEY=your-secret-key
     BINANCE_TESTNET=True
+    CRYPTO_EXCHANGE=binance # or coinbase, kraken, etc.
     ```
 
 ### Step 4: Launch the Dashboard
@@ -85,14 +87,14 @@ python easy_start.py
     *   The system fetches data (Price, RSI, MACD).
     *   It sends this data to the AI.
     *   The AI "thinks" (e.g., "RSI is 30, Oversold. Trend is Up. Buy.").
-    *   The **Risk Manager** checks the trade (Is position < 10%? Is Stop Loss set?).
+    *   The **Risk Manager** checks the trade (Is position < 10%? Is Stop Loss set? **Is the symbol correct?**).
     *   If approved, the order is placed on the exchange!
 
 ### Step 6: Go Fully Autonomous
 Once you trust the system, run it in a loop from the command line:
 ```bash
-# Example: Trade Crypto 24/7
-python main.py --mode CRYPTO --symbols BTC/USDT ETH/USDT --loop
+# Example: Trade Crypto 24/7 on Coinbase
+python main.py --mode CRYPTO --exchange coinbase --symbols BTC/USD ETH/USD --loop
 ```
 The bot will now run forever, sleeping for 60 seconds between analysis cycles.
 
@@ -147,7 +149,7 @@ Now access `https://bot.yourdomain.com` securely!
 The heart of the system.
 *   `base_connector.py`: The abstract blueprint for all exchanges.
 *   `ib_connector.py`: The specialized driver for Interactive Brokers.
-*   `ccxt_connector.py`: The universal driver for Crypto exchanges.
+*   `ccxt_connector.py`: The universal driver for Crypto exchanges (Binance, Coinbase, Kraken, etc.). Handles dynamic symbol standardization.
 *   `risk_manager.py`: The "Gatekeeper". Validates every trade against safety rules before execution. Returns `RiskCheck` objects.
 *   `market_utils.py`: Knows when markets open and close.
 *   `db_manager.py`: Handles persistent storage (SQLite).
@@ -157,12 +159,17 @@ The heart of the system.
 
 ### 2. AI (`ai/`)
 The brain.
-*   `ai_wrapper.py`: Connects to OpenRouter using `AsyncOpenAI`. Handles Function Calling. Supports Gemini, Mistral, GPT.
+*   `ai_wrapper.py`: Connects to OpenRouter using `AsyncOpenAI`. Features **Hallucination Detection** (verifies symbol match) and **JSON Fallback** (parses raw JSON if tool calling fails).
 *   `prompt_manager.py`: Stores the "Senior Quant" persona and Chain-of-Thought prompts.
 
 ### 3. Dashboard (`dashboard/`)
 The eyes.
 *   `app.py`: A Streamlit web application. Supports "Unified Portfolio" view to aggregate net worth across exchanges. Secured by Login.
+
+### 4. Tests (`tests/`)
+The Quality Assurance layer.
+*   `test_stability.py`: Verifies system resilience against Hallucinations and API Timeouts.
+*   `test_ccxt_connector.py`: Mocks exchange interactions to ensure connectivity logic.
 
 ---
 
@@ -181,4 +188,4 @@ To verify the system integrity, run the test suite:
 ```bash
 python -m pytest
 ```
-This runs ~20 tests covering connection logic, AI reasoning (including Gemini format), risk management, and order execution mocks.
+This runs tests covering connection logic, AI reasoning (including Gemini format), risk management, order execution mocks, and stability checks.

@@ -1,6 +1,7 @@
 import requests
 import logging
 import os
+import asyncio
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,7 +11,7 @@ class Notifier:
         self.webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
         self.logger = logging.getLogger(__name__)
 
-    def send_trade_alert(self, symbol, action, quantity, price, stop_loss, reason):
+    async def send_trade_alert(self, symbol, action, quantity, price, stop_loss, reason):
         """Sends a trade alert to Discord."""
         if not self.webhook_url:
             self.logger.info("No Discord Webhook configured. Skipping notification.")
@@ -34,7 +35,8 @@ class Notifier:
         }
 
         try:
-            response = requests.post(self.webhook_url, json=payload)
+            # Run blocking I/O in a separate thread
+            response = await asyncio.to_thread(requests.post, self.webhook_url, json=payload)
             response.raise_for_status()
             self.logger.info(f"Notification sent for {symbol}")
         except Exception as e:

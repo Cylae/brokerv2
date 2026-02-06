@@ -49,7 +49,7 @@ class CCXTConnector(BaseConnector):
 
     async def get_market_data(self, symbol: str) -> Optional[MarketData]:
         # Standardization Logic
-        if '/' not in symbol and len(symbol) <= 5:
+        if '/' not in symbol:
                 symbol = f"{symbol}/USDT"
 
         try:
@@ -97,20 +97,36 @@ class CCXTConnector(BaseConnector):
 
             self.logger.info(f"Entry Order Placed: {order['id']}")
 
-            # 2. Place Stop Loss (Simplified Logic)
+            # 2. Place Stop Loss
             if stop_loss and action == 'BUY':
                 try:
-                    # Generic stop loss logic often differs by exchange.
-                    # For generic support, we rely on basic 'STOP_LOSS_LIMIT' or similar if supported.
-                    # This implementation targets Binance semantics primarily but fits generic CCXT structure.
-                    stop_params = {'stopPrice': stop_loss}
+                    sl_params = {}
+                    sl_type = 'market' # Default fallback
+                    sl_price = None
+
+                    if self.exchange_id == 'binance':
+                        sl_type = 'STOP_LOSS_LIMIT'
+                        sl_price = stop_loss # Limit Price
+                        sl_params = {'stopPrice': stop_loss}
+                    elif 'coinbase' in self.exchange_id:
+                        # Coinbase Advanced Trade usually expects 'stop' param
+                        sl_type = 'market'
+                        sl_params = {'stop': 'loss', 'stopPrice': stop_loss}
+                    elif 'kraken' in self.exchange_id:
+                        sl_type = 'stop-loss'
+                        sl_price = stop_loss
+                    else:
+                        # Generic CCXT attempt
+                        sl_params = {'stopPrice': stop_loss}
+
+                    # Execute Stop Order
                     stop_order = await self.exchange.create_order(
                         symbol,
-                        'STOP_LOSS_LIMIT',
+                        sl_type,
                         'sell',
                         quantity,
-                        stop_loss, # Limit Price
-                        stop_params
+                        sl_price,
+                        sl_params
                     )
                     self.logger.info(f"Stop Loss Placed: {stop_order['id']}")
                 except Exception as sl_e:

@@ -1,17 +1,18 @@
 # 🤖 Autonomous Multi-Model AI Trading System (Pro)
 
-The ultimate "Senior Quantitative Architect" grade trading system. It combines Python, Interactive Brokers (Stocks), CCXT (Crypto), and OpenRouter (LLMs) into a unified, autonomous trading machine.
+The ultimate "Senior Quantitative Architect" grade trading system. It combines Python, Interactive Brokers (Stocks), CCXT (Multi-Exchange Crypto), and OpenRouter (LLMs) into a unified, autonomous trading machine.
 
 ## 🌟 Key Features
 
 *   **Universal Connectivity:**
     *   **Stocks/Options:** Interactive Brokers (IBKR) via `ib_insync`.
-    *   **Crypto:** Binance, Coinbase, Kraken, etc., via `ccxt`.
+    *   **Crypto:** Binance, Coinbase, Kraken, and more via `ccxt`.
 *   **Unified Architecture:** A robust `BaseConnector` interface means the bot treats Apple stock and Bitcoin exactly the same.
+*   **Multi-Exchange Support:** Execute trades and monitor portfolios across multiple crypto exchanges simultaneously in "Unified Portfolio" mode.
 *   **AI-Driven Decisions:** Uses GPT-4, Mistral, **Gemini**, or Grok to analyze technical indicators and market data via OpenRouter.
 *   **Institutional Safety:**
     *   **Risk Manager:** Hard-coded limits (Max Risk 2%, Max Position 10%).
-    *   **Stop Losses:** Mandatory for every trade.
+    *   **Stop Losses:** Mandatory for every trade (Supports Exchange-Specific logic for Binance, Coinbase, Kraken).
     *   **Market Hours:** Respects NYSE hours for stocks, runs 24/7 for crypto.
 *   **Production Ready:**
     *   **Database:** SQLite persistence for trade history.
@@ -44,7 +45,10 @@ Follow this guide to go from "Empty Folder" to "AI Trading" safely.
     *   Check **"Enable ActiveX and Socket Clients"**.
     *   Uncheck **"Read-Only API"**.
     *   Note the Port (usually **7497** for paper).
-*   **Crypto (Optional):** Go to Binance Testnet or use your real account (BE CAREFUL). Get an API Key and Secret.
+*   **Crypto (Optional):**
+    *   **Binance:** Go to Binance Testnet or use your real account.
+    *   **Coinbase:** Generate API Key and Secret (Advanced Trade).
+    *   **Kraken:** Generate API Key and Private Key.
 
 ### Step 3: Configure the System
 1.  Rename `.env.example` to `.env`.
@@ -61,10 +65,16 @@ Follow this guide to go from "Empty Folder" to "AI Trading" safely.
     IB_ACCOUNT=DU12345
     IB_PORT=7497
 
-    # If trading crypto:
-    BINANCE_API_KEY=your-api-key
-    BINANCE_SECRET_KEY=your-secret-key
+    # Crypto Exchanges (Add as needed)
+    BINANCE_API_KEY=your-binance-key
+    BINANCE_SECRET_KEY=your-binance-secret
     BINANCE_TESTNET=True
+
+    COINBASE_API_KEY=your-coinbase-key
+    COINBASE_SECRET_KEY=your-coinbase-secret
+
+    KRAKEN_API_KEY=your-kraken-key
+    KRAKEN_SECRET_KEY=your-kraken-secret
     ```
 
 ### Step 4: Launch the Dashboard
@@ -75,13 +85,15 @@ python easy_start.py
 1.  Select **Option 1 (Launch Dashboard)**.
 2.  A web page will open.
 3.  **Login** with the username/password you set in Step 3.
-4.  On the sidebar, select **Trading Mode** (e.g., "Crypto").
-5.  Click **Connect**. You should see a green "Connected" message.
+4.  On the sidebar, select **Trading Mode**.
+    *   **Unified Portfolio:** Connects to *all* configured exchanges (IBKR + Crypto) and displays balances side-by-side.
+    *   **Crypto (Generic):** Select a specific exchange to trade on manually.
 
 ### Step 5: Execute an AI Trade (Manual Trigger)
-1.  In the Dashboard, enter a symbol (e.g., `BTC/USDT` or `AAPL`).
-2.  Click **Analyze & Execute**.
-3.  **Watch the Logs:**
+1.  In the Dashboard, select "Crypto (Generic)" and choose your exchange.
+2.  Enter a symbol (e.g., `BTC/USDT` or `ETH/USD`).
+3.  Click **Analyze & Execute**.
+4.  **Watch the Logs:**
     *   The system fetches data (Price, RSI, MACD).
     *   It sends this data to the AI.
     *   The AI "thinks" (e.g., "RSI is 30, Oversold. Trend is Up. Buy.").
@@ -91,8 +103,8 @@ python easy_start.py
 ### Step 6: Go Fully Autonomous
 Once you trust the system, run it in a loop from the command line:
 ```bash
-# Example: Trade Crypto 24/7
-python main.py --mode CRYPTO --symbols BTC/USDT ETH/USDT --loop
+# Example: Trade Crypto 24/7 on Binance
+python main.py --mode CRYPTO --exchange binance --symbols BTC/USDT ETH/USDT --loop
 ```
 The bot will now run forever, sleeping for 60 seconds between analysis cycles.
 
@@ -147,7 +159,7 @@ Now access `https://bot.yourdomain.com` securely!
 The heart of the system.
 *   `base_connector.py`: The abstract blueprint for all exchanges.
 *   `ib_connector.py`: The specialized driver for Interactive Brokers.
-*   `ccxt_connector.py`: The universal driver for Crypto exchanges.
+*   `ccxt_connector.py`: The universal driver for Crypto exchanges. Supports **Binance, Coinbase, Kraken** with exchange-specific Order execution logic.
 *   `risk_manager.py`: The "Gatekeeper". Validates every trade against safety rules before execution. Returns `RiskCheck` objects.
 *   `market_utils.py`: Knows when markets open and close.
 *   `db_manager.py`: Handles persistent storage (SQLite).
@@ -162,7 +174,7 @@ The brain.
 
 ### 3. Dashboard (`dashboard/`)
 The eyes.
-*   `app.py`: A Streamlit web application. Supports "Unified Portfolio" view to aggregate net worth across exchanges. Secured by Login.
+*   `app.py`: A Streamlit web application. Supports "Unified Portfolio" view to aggregate net worth across all connected exchanges (Stocks + Multiple Crypto). Secured by Login.
 
 ---
 
@@ -181,4 +193,4 @@ To verify the system integrity, run the test suite:
 ```bash
 python -m pytest
 ```
-This runs ~20 tests covering connection logic, AI reasoning (including Gemini format), risk management, and order execution mocks.
+This runs ~30 tests covering connection logic, multi-exchange integration, AI reasoning (including Gemini format), risk management, and order execution mocks.

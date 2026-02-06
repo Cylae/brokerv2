@@ -101,29 +101,36 @@ if trading_mode == "Unified Portfolio":
                 except Exception as e:
                     st.error(f"IBKR Error: {e}")
 
-            # 2. Crypto (Binance)
-            if Config and Config.BINANCE_API_KEY:
-                try:
-                    ccxt = CCXTConnector(
-                        Config.BINANCE_API_KEY.get_secret_value(),
-                        Config.BINANCE_SECRET_KEY.get_secret_value(),
-                        exchange_id=Config.CRYPTO_EXCHANGE,
-                        testnet=Config.BINANCE_TESTNET
-                    )
-                    loop = get_or_create_event_loop()
-                    loop.run_until_complete(ccxt.connect())
-                    summary = loop.run_until_complete(ccxt.get_account_summary())
-                    positions = loop.run_until_complete(ccxt.get_positions())
-                    loop.run_until_complete(ccxt.disconnect())
+            # 2. Crypto Exchanges
+            crypto_configs = [
+                ("BINANCE", Config.BINANCE_API_KEY, Config.BINANCE_SECRET_KEY, Config.BINANCE_TESTNET),
+                ("COINBASE", Config.COINBASE_API_KEY, Config.COINBASE_SECRET_KEY, False),
+                ("KRAKEN", Config.KRAKEN_API_KEY, Config.KRAKEN_SECRET_KEY, False)
+            ]
 
-                    portfolios.append({
-                        "Exchange": Config.CRYPTO_EXCHANGE.upper(),
-                        "Net Liquidation": summary.net_liquidation,
-                        "Currency": summary.currency,
-                        "Positions": len(positions)
-                    })
-                except Exception as e:
-                    st.error(f"Crypto Error: {e}")
+            for name, key, secret, is_testnet in crypto_configs:
+                if key:
+                    try:
+                        connector = CCXTConnector(
+                            key.get_secret_value(),
+                            secret.get_secret_value() if secret else "",
+                            exchange_id=name.lower(),
+                            testnet=is_testnet
+                        )
+                        loop = get_or_create_event_loop()
+                        loop.run_until_complete(connector.connect())
+                        summary = loop.run_until_complete(connector.get_account_summary())
+                        positions = loop.run_until_complete(connector.get_positions())
+                        loop.run_until_complete(connector.disconnect())
+
+                        portfolios.append({
+                            "Exchange": name,
+                            "Net Liquidation": summary.net_liquidation,
+                            "Currency": summary.currency,
+                            "Positions": len(positions)
+                        })
+                    except Exception as e:
+                        st.error(f"{name} Error: {e}")
 
             # Display
             if portfolios:

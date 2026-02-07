@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # BINANCE / CRYPTO
     BINANCE_API_KEY: Optional[SecretStr] = None
     BINANCE_SECRET_KEY: Optional[SecretStr] = None
+    CRYPTO_API_KEY: Optional[SecretStr] = None
+    CRYPTO_SECRET_KEY: Optional[SecretStr] = None
+    CRYPTO_PASSPHRASE: Optional[SecretStr] = None
     BINANCE_TESTNET: bool = False
 
     # AI

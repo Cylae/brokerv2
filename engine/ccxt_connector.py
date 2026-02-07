@@ -9,20 +9,25 @@ from .indicators import Indicators
 from .models import MarketData, TradeResult, Position, AccountSummary
 
 class CCXTConnector(BaseConnector):
-    def __init__(self, api_key: str, secret_key: str, exchange_id: str = 'binance', testnet: bool = False):
+    def __init__(self, api_key: str, secret_key: str, exchange_id: str = 'binance', testnet: bool = False, password: Optional[str] = None):
         self.api_key = api_key
         self.secret_key = secret_key
+        self.password = password
         self.exchange_id = exchange_id.lower()
         self.testnet = testnet
 
         # Initialize Exchange
         exchange_class = getattr(ccxt, self.exchange_id)
-        self.exchange = exchange_class({
+        config = {
             'apiKey': api_key,
             'secret': secret_key,
             'enableRateLimit': True,
             'options': {'defaultType': 'spot'}
-        })
+        }
+        if password:
+            config['password'] = password
+
+        self.exchange = exchange_class(config)
         if testnet:
             self.exchange.set_sandbox_mode(True)
 

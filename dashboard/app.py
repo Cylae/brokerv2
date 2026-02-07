@@ -80,60 +80,63 @@ if trading_mode == "Unified Portfolio":
 
     if st.button("Fetch All Accounts"):
         with st.spinner("Connecting to all exchanges..."):
-            portfolios = []
+            from engine.portfolio_manager import PortfolioManager
+
+            connectors = []
 
             # 1. IBKR
             if Config and Config.IB_HOST:
                 try:
                     ib = IBKRConnector(Config.IB_HOST, Config.IB_PORT, Config.IB_CLIENT_ID)
-                    loop = get_or_create_event_loop()
-                    loop.run_until_complete(ib.connect())
-                    summary = loop.run_until_complete(ib.get_account_summary())
-                    positions = loop.run_until_complete(ib.get_positions())
-                    loop.run_until_complete(ib.disconnect())
-
-                    portfolios.append({
-                        "Exchange": "IBKR",
-                        "Net Liquidation": summary.net_liquidation,
-                        "Currency": summary.currency,
-                        "Positions": len(positions)
-                    })
+                    connectors.append(ib)
                 except Exception as e:
-                    st.error(f"IBKR Error: {e}")
+                    st.error(f"IBKR Init Error: {e}")
 
-            # 2. Crypto (Binance)
-            if Config and Config.BINANCE_API_KEY:
+            # 2. Crypto
+            c_key = Config.CRYPTO_API_KEY if Config.CRYPTO_API_KEY else Config.BINANCE_API_KEY
+            c_sec = Config.CRYPTO_SECRET_KEY if Config.CRYPTO_SECRET_KEY else Config.BINANCE_SECRET_KEY
+            c_pass = Config.CRYPTO_PASSPHRASE
+
+            if Config and c_key:
                 try:
-                    ccxt = CCXTConnector(
-                        Config.BINANCE_API_KEY.get_secret_value(),
-                        Config.BINANCE_SECRET_KEY.get_secret_value(),
+                    ccxt_conn = CCXTConnector(
+                        c_key.get_secret_value(),
+                        c_sec.get_secret_value() if c_sec else "",
                         exchange_id=Config.CRYPTO_EXCHANGE,
-                        testnet=Config.BINANCE_TESTNET
+                        testnet=Config.BINANCE_TESTNET,
+                        password=c_pass.get_secret_value() if c_pass else None
                     )
-                    loop = get_or_create_event_loop()
-                    loop.run_until_complete(ccxt.connect())
-                    summary = loop.run_until_complete(ccxt.get_account_summary())
-                    positions = loop.run_until_complete(ccxt.get_positions())
-                    loop.run_until_complete(ccxt.disconnect())
-
-                    portfolios.append({
-                        "Exchange": Config.CRYPTO_EXCHANGE.upper(),
-                        "Net Liquidation": summary.net_liquidation,
-                        "Currency": summary.currency,
-                        "Positions": len(positions)
-                    })
+                    connectors.append(ccxt_conn)
                 except Exception as e:
-                    st.error(f"Crypto Error: {e}")
+                    st.error(f"Crypto Init Error: {e}")
 
-            # Display
-            if portfolios:
-                df = pd.DataFrame(portfolios)
-                st.dataframe(df)
-                total_usd = df[df['Currency'] == 'USD']['Net Liquidation'].sum() + \
-                            df[df['Currency'] == 'USDT']['Net Liquidation'].sum()
-                st.metric("Approx. Total Net Worth (USD)", f"${total_usd:,.2f}")
+            if connectors:
+                pm = PortfolioManager(connectors)
+                loop = get_or_create_event_loop()
+
+                try:
+                    loop.run_until_complete(pm.connect_all())
+                    summary = loop.run_until_complete(pm.get_unified_account_summary())
+                    positions = loop.run_until_complete(pm.get_unified_positions())
+                    loop.run_until_complete(pm.disconnect_all())
+
+                    st.metric("Total Net Worth (Approx USD)", f"${summary.net_liquidation:,.2f}")
+                    st.metric("Total Cash", f"${summary.total_cash:,.2f}")
+
+                    if positions:
+                        st.subheader("Unified Positions")
+                        pos_data = [
+                            {"Symbol": p.symbol, "Quantity": p.quantity, "Avg Cost": p.avg_cost}
+                            for p in positions
+                        ]
+                        st.dataframe(pd.DataFrame(pos_data))
+                    else:
+                        st.info("No positions found.")
+
+                except Exception as e:
+                    st.error(f"Error fetching portfolio: {e}")
             else:
-                st.warning("No exchanges connected or configured.")
+                 st.warning("No exchanges configured.")
 
 # --- INDIVIDUAL TRADING MODES ---
 else:

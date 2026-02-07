@@ -103,9 +103,23 @@ class AIWrapper:
                     "raw_response": message
                 }
             else:
-                # Gemini often chats instead of calling tools if not forced.
-                # If we get text, we could try to parse it, but for safety we Default to HOLD.
                 self.logger.warning(f"AI ({self.model}) did not use a tool. Content: {message.content}")
+
+                # Fallback: Try to parse JSON from text
+                fallback_data = self._parse_fallback_json(message.content)
+                if fallback_data:
+                    # Heuristic: Check for explicit 'action' or 'decision' field
+                    action = fallback_data.get('decision') or fallback_data.get('action')
+                    if action:
+                        if 'buy' in action.lower(): fn = 'buy_stock'
+                        elif 'sell' in action.lower(): fn = 'sell_stock'
+                        else: fn = 'hold_position'
+                        return {
+                            "decision": fn,
+                            "args": fallback_data,
+                            "raw_response": message
+                        }
+
                 return {
                     "decision": "hold_position",
                     "args": {"symbol": market_data.get('symbol', 'UNKNOWN'), "reason": f"AI ({self.model}) returned text only."},
@@ -115,3 +129,13 @@ class AIWrapper:
         except Exception as e:
             self.logger.error(f"Error calling AI ({self.model}): {e}")
             return None
+
+    def _parse_fallback_json(self, content):
+        import re
+        try:
+            match = re.search(r'```json\s*(\{.*?\})\s*```', content, re.DOTALL)
+            if match: return json.loads(match.group(1))
+            match = re.search(r'(\{.*\})', content, re.DOTALL)
+            if match: return json.loads(match.group(1))
+        except: pass
+        return None

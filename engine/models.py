@@ -20,6 +20,7 @@ class TradeResult:
     quantity: float
     price: Optional[float] = None
     status: str = "SUBMITTED"
+    asset_type: str = "STOCK"
     timestamp: datetime = field(default_factory=datetime.now)
 
 @dataclass
@@ -29,6 +30,7 @@ class Position:
     avg_cost: float = 0.0
     current_price: float = 0.0
     unrealized_pnl: float = 0.0
+    asset_type: str = "STOCK"
 
 @dataclass
 class AccountSummary:

@@ -9,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from engine.ib_connector import IBKRConnector
 from engine.ccxt_connector import CCXTConnector
+from engine.portfolio_manager import PortfolioManager
 from engine.async_utils import get_or_create_event_loop
 from ai.ai_wrapper import AIWrapper
 from config import Config
@@ -80,60 +81,64 @@ if trading_mode == "Unified Portfolio":
 
     if st.button("Fetch All Accounts"):
         with st.spinner("Connecting to all exchanges..."):
-            portfolios = []
+            pm = PortfolioManager()
+            loop = get_or_create_event_loop()
 
             # 1. IBKR
             if Config and Config.IB_HOST:
-                try:
-                    ib = IBKRConnector(Config.IB_HOST, Config.IB_PORT, Config.IB_CLIENT_ID)
-                    loop = get_or_create_event_loop()
-                    loop.run_until_complete(ib.connect())
-                    summary = loop.run_until_complete(ib.get_account_summary())
-                    positions = loop.run_until_complete(ib.get_positions())
-                    loop.run_until_complete(ib.disconnect())
+                pm.add_connector(IBKRConnector(Config.IB_HOST, Config.IB_PORT, Config.IB_CLIENT_ID))
 
-                    portfolios.append({
-                        "Exchange": "IBKR",
-                        "Net Liquidation": summary.net_liquidation,
-                        "Currency": summary.currency,
-                        "Positions": len(positions)
-                    })
-                except Exception as e:
-                    st.error(f"IBKR Error: {e}")
-
-            # 2. Crypto (Binance)
+            # 2. Binance
             if Config and Config.BINANCE_API_KEY:
-                try:
-                    ccxt = CCXTConnector(
-                        Config.BINANCE_API_KEY.get_secret_value(),
-                        Config.BINANCE_SECRET_KEY.get_secret_value(),
-                        exchange_id=Config.CRYPTO_EXCHANGE,
-                        testnet=Config.BINANCE_TESTNET
-                    )
-                    loop = get_or_create_event_loop()
-                    loop.run_until_complete(ccxt.connect())
-                    summary = loop.run_until_complete(ccxt.get_account_summary())
-                    positions = loop.run_until_complete(ccxt.get_positions())
-                    loop.run_until_complete(ccxt.disconnect())
+                pm.add_connector(CCXTConnector(
+                    Config.BINANCE_API_KEY.get_secret_value(),
+                    Config.BINANCE_SECRET_KEY.get_secret_value(),
+                    exchange_id='binance',
+                    testnet=Config.BINANCE_TESTNET
+                ))
 
-                    portfolios.append({
-                        "Exchange": Config.CRYPTO_EXCHANGE.upper(),
-                        "Net Liquidation": summary.net_liquidation,
-                        "Currency": summary.currency,
-                        "Positions": len(positions)
-                    })
-                except Exception as e:
-                    st.error(f"Crypto Error: {e}")
+            # 3. Coinbase
+            if Config and Config.COINBASE_API_KEY:
+                pm.add_connector(CCXTConnector(
+                    Config.COINBASE_API_KEY.get_secret_value(),
+                    Config.COINBASE_SECRET_KEY.get_secret_value(),
+                    exchange_id='coinbase',
+                    passphrase=Config.CRYPTO_PASSPHRASE.get_secret_value() if Config.CRYPTO_PASSPHRASE else None
+                ))
 
-            # Display
-            if portfolios:
-                df = pd.DataFrame(portfolios)
-                st.dataframe(df)
-                total_usd = df[df['Currency'] == 'USD']['Net Liquidation'].sum() + \
-                            df[df['Currency'] == 'USDT']['Net Liquidation'].sum()
-                st.metric("Approx. Total Net Worth (USD)", f"${total_usd:,.2f}")
-            else:
-                st.warning("No exchanges connected or configured.")
+            # 4. Kraken
+            if Config and Config.KRAKEN_API_KEY:
+                pm.add_connector(CCXTConnector(
+                    Config.KRAKEN_API_KEY.get_secret_value(),
+                    Config.KRAKEN_SECRET_KEY.get_secret_value(),
+                    exchange_id='kraken'
+                ))
+
+            try:
+                loop.run_until_complete(pm.connect_all())
+                summary = loop.run_until_complete(pm.get_aggregated_summary())
+                positions = loop.run_until_complete(pm.get_all_positions())
+                loop.run_until_complete(pm.disconnect_all())
+
+                st.metric("Total Net Worth (USD/USDT)", f"${summary.net_liquidation:,.2f}")
+
+                if positions:
+                    st.subheader("Aggregated Positions")
+                    # Convert to DataFrame
+                    data = []
+                    for p in positions:
+                        data.append({
+                            "Symbol": p.symbol,
+                            "Quantity": p.quantity,
+                            "Type": p.asset_type,
+                            "Avg Cost": p.avg_cost
+                        })
+                    st.dataframe(pd.DataFrame(data))
+                else:
+                    st.info("No positions found.")
+
+            except Exception as e:
+                st.error(f"Error fetching portfolio: {e}")
 
 # --- INDIVIDUAL TRADING MODES ---
 else:

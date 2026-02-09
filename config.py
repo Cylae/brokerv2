@@ -23,6 +23,19 @@ class Settings(BaseSettings):
     BINANCE_SECRET_KEY: Optional[SecretStr] = None
     BINANCE_TESTNET: bool = False
 
+    # COINBASE
+    COINBASE_API_KEY: Optional[SecretStr] = None
+    COINBASE_SECRET_KEY: Optional[SecretStr] = None
+
+    # KRAKEN
+    KRAKEN_API_KEY: Optional[SecretStr] = None
+    KRAKEN_SECRET_KEY: Optional[SecretStr] = None
+
+    # GENERIC / OTHERS (For flexibility)
+    CRYPTO_API_KEY: Optional[SecretStr] = None
+    CRYPTO_SECRET_KEY: Optional[SecretStr] = None
+    CRYPTO_PASSPHRASE: Optional[SecretStr] = None
+
     # AI
     OPENROUTER_KEY: SecretStr
     # Defaulting to Mistral, but users can switch to Gemini

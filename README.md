@@ -1,184 +1,146 @@
-# 🤖 Autonomous Multi-Model AI Trading System (Pro)
+# 🤖 Autonomous Multi-Model AI Trading System
 
-The ultimate "Senior Quantitative Architect" grade trading system. It combines Python, Interactive Brokers (Stocks), CCXT (Crypto), and OpenRouter (LLMs) into a unified, autonomous trading machine.
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![Status](https://img.shields.io/badge/status-active-green)
 
-## 🌟 Key Features
-
-*   **Universal Connectivity:**
-    *   **Stocks/Options:** Interactive Brokers (IBKR) via `ib_insync`.
-    *   **Crypto:** Binance, Coinbase, Kraken, etc., via `ccxt`.
-*   **Unified Architecture:** A robust `BaseConnector` interface means the bot treats Apple stock and Bitcoin exactly the same.
-*   **AI-Driven Decisions:** Uses GPT-4, Mistral, **Gemini**, or Grok to analyze technical indicators and market data via OpenRouter.
-*   **Institutional Safety:**
-    *   **Risk Manager:** Hard-coded limits (Max Risk 2%, Max Position 10%).
-    *   **Stop Losses:** Mandatory for every trade.
-    *   **Market Hours:** Respects NYSE hours for stocks, runs 24/7 for crypto.
-*   **Production Ready:**
-    *   **Database:** SQLite persistence for trade history.
-    *   **Notifications:** Real-time Discord alerts.
-    *   **Resilience:** Auto-reconnect logic with exponential backoff.
-*   **Security:**
-    *   **Web Dashboard Auth:** Protect your interface with a username/password.
-    *   **Automated SSL:** One-click script for LetsEncrypt setup.
-    *   **Strict Validation:** Configuration validated via `pydantic`.
+A professional-grade, autonomous trading system connecting **Interactive Brokers (IBKR)** and **Multiple Crypto Exchanges (Binance, Coinbase, Kraken)** with state-of-the-art LLMs (GPT-4, Mistral, Gemini) via OpenRouter.
 
 ---
 
-## 🎓 Zero-to-Hero Tutorial: Your First Trade
+## 🚀 Zero-to-Hero Tutorial
 
-Follow this guide to go from "Empty Folder" to "AI Trading" safely.
+### Step 1: Prerequisites
+1.  **Python 3.11+**: Ensure Python is installed.
+2.  **IBKR Gateway / TWS**: For stock trading, you need IBKR software running.
+    -   Enable "Enable ActiveX and Socket Clients".
+    -   Port: `7497` (Paper) or `7496` (Live).
+3.  **Crypto API Keys**: Get API Key & Secret from your exchange (Binance, Coinbase, etc.).
 
-### Step 1: Install & Setup
-1.  **Clone the Repo:** Download this code to your machine.
-2.  **Install Python:** Ensure you have Python 3.10+ installed.
-3.  **Install Libraries:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-### Step 2: Get Your Keys (Paper Trading ONLY!)
-*   **AI:** Go to [OpenRouter.ai](https://openrouter.ai), create an account, and generate an API Key.
-    *   *Supported Models:* `mistralai/mistral-7b-instruct`, `google/gemini-2.0-flash-exp:free`, `openai/gpt-4-turbo`.
-*   **Stocks (Optional):** Download [TWS (Trader Workstation)](https://www.interactivebrokers.com/en/trading/tws.php). Log in with your **Paper Trading** account.
-    *   Go to `File -> Global Configuration -> API -> Settings`.
-    *   Check **"Enable ActiveX and Socket Clients"**.
-    *   Uncheck **"Read-Only API"**.
-    *   Note the Port (usually **7497** for paper).
-*   **Crypto (Optional):** Go to Binance Testnet or use your real account (BE CAREFUL). Get an API Key and Secret.
-
-### Step 3: Configure the System
-1.  Rename `.env.example` to `.env`.
-2.  Open `.env` and fill in your keys:
-    ```env
-    OPENROUTER_KEY=sk-or-v1-your-key-here
-    OPENROUTER_MODEL=google/gemini-2.0-flash-exp:free  # Optional: Switch to Gemini
-
-    # Dashboard Security
-    DASHBOARD_USERNAME=admin
-    DASHBOARD_PASSWORD=securepassword123
-
-    # If trading stocks:
-    IB_ACCOUNT=DU12345
-    IB_PORT=7497
-
-    # If trading crypto:
-    BINANCE_API_KEY=your-api-key
-    BINANCE_SECRET_KEY=your-secret-key
-    BINANCE_TESTNET=True
-    ```
-
-### Step 4: Launch the Dashboard
-Run the "Easy Launcher" to verify everything works.
+### Step 2: Installation
 ```bash
-python easy_start.py
+git clone <repository_url>
+cd trading-system
+pip install -r requirements.txt
 ```
-1.  Select **Option 1 (Launch Dashboard)**.
-2.  A web page will open.
-3.  **Login** with the username/password you set in Step 3.
-4.  On the sidebar, select **Trading Mode** (e.g., "Crypto").
-5.  Click **Connect**. You should see a green "Connected" message.
 
-### Step 5: Execute an AI Trade (Manual Trigger)
-1.  In the Dashboard, enter a symbol (e.g., `BTC/USDT` or `AAPL`).
-2.  Click **Analyze & Execute**.
-3.  **Watch the Logs:**
-    *   The system fetches data (Price, RSI, MACD).
-    *   It sends this data to the AI.
-    *   The AI "thinks" (e.g., "RSI is 30, Oversold. Trend is Up. Buy.").
-    *   The **Risk Manager** checks the trade (Is position < 10%? Is Stop Loss set?).
-    *   If approved, the order is placed on the exchange!
+### Step 3: Configuration
+Create a `.env` file in the root directory (copy `.env.example` if available) and configure your keys.
 
-### Step 6: Go Fully Autonomous
-Once you trust the system, run it in a loop from the command line:
-```bash
-# Example: Trade Crypto 24/7
-python main.py --mode CRYPTO --symbols BTC/USDT ETH/USDT --loop
-```
-The bot will now run forever, sleeping for 60 seconds between analysis cycles.
-
----
-
-## 🐧 Linux Server Deployment Guide (Pro)
-
-To run this bot on a headless Linux VPS (DigitalOcean, AWS, Linode) and access the dashboard securely:
-
-### 1. Run as a Background Service (systemd)
-Create a service file to keep the bot running automatically.
-
-`sudo nano /etc/systemd/system/trading-bot.service`
-
+**Required Environment Variables:**
 ```ini
-[Unit]
-Description=AI Trading Bot
-After=network.target
+# --- AI Configuration ---
+OPENROUTER_KEY=sk-or-v1-YOUR-KEY...
+OPENROUTER_MODEL=mistralai/mistral-7b-instruct
 
-[Service]
-User=root
-WorkingDirectory=/path/to/trading-system
-ExecStart=/usr/bin/python3 main.py --mode CRYPTO --loop
-Restart=always
+# --- Dashboard Security ---
+DASHBOARD_USERNAME=admin
+DASHBOARD_PASSWORD=supersecurepassword
 
-[Install]
-WantedBy=multi-user.target
+# --- IBKR (Stocks) ---
+IB_ACCOUNT=DU12345
+IB_HOST=127.0.0.1
+IB_PORT=7497
+IB_CLIENT_ID=1
+
+# --- Crypto Exchanges ---
+# Binance
+BINANCE_API_KEY=your_binance_key
+BINANCE_SECRET_KEY=your_binance_secret
+
+# Coinbase Advanced Trade
+COINBASE_API_KEY=your_coinbase_key
+COINBASE_SECRET_KEY=your_coinbase_secret
+
+# Kraken
+KRAKEN_API_KEY=your_kraken_key
+KRAKEN_SECRET_KEY=your_kraken_secret
+
+# Generic (Other)
+CRYPTO_API_KEY=...
+CRYPTO_SECRET_KEY=...
+CRYPTO_PASSPHRASE=... # If required (e.g. KuCoin, Coinbase Pro)
 ```
-Enable it: `sudo systemctl enable trading-bot && sudo systemctl start trading-bot`
 
-### 2. Secure the Dashboard (Automated SSL)
-We have provided a script to automatically set up Nginx and LetsEncrypt SSL.
+### Step 4: Run the System
+You have two modes: **Headless Loop** (CLI) or **Dashboard** (UI).
 
-1.  Make sure your domain (e.g., `bot.yourdomain.com`) points to your server's IP.
-2.  Run the setup script as root:
-    ```bash
-    sudo ./scripts/setup_ssl.sh bot.yourdomain.com
-    ```
-3.  The script will:
-    *   Install Nginx.
-    *   Configure a reverse proxy to Streamlit (Port 8501).
-    *   Request an SSL certificate from LetsEncrypt.
-    *   Redirect HTTP to HTTPS.
+**Option A: Streamlit Dashboard (Recommended)**
+```bash
+streamlit run dashboard/app.py
+```
+-   Open `http://localhost:8501`.
+-   Login with your configured credentials.
+-   Select "Unified Portfolio" to view all assets.
+-   Select "Crypto (Generic)" or "IBKR" to execute trades.
 
-Now access `https://bot.yourdomain.com` securely!
+**Option B: Headless CLI**
+```bash
+# Trade Crypto on Binance
+python main.py --mode CRYPTO --exchange binance --symbols BTC/USDT ETH/USDT --loop
+
+# Trade Stocks on IBKR
+python main.py --mode IBKR --symbols AAPL TSLA --loop
+```
 
 ---
 
-## 📚 Module Guide (Architecture)
+## 🏗 Architecture Overview
 
-### 1. Engine (`engine/`)
-The heart of the system.
-*   `base_connector.py`: The abstract blueprint for all exchanges.
-*   `ib_connector.py`: The specialized driver for Interactive Brokers.
-*   `ccxt_connector.py`: The universal driver for Crypto exchanges.
-*   `risk_manager.py`: The "Gatekeeper". Validates every trade against safety rules before execution. Returns `RiskCheck` objects.
-*   `market_utils.py`: Knows when markets open and close.
-*   `db_manager.py`: Handles persistent storage (SQLite).
-*   `notifier.py`: Sends Discord webhooks.
-*   `models.py`: Unified data structures (`MarketData`, `Position`, `RiskCheck` etc.).
-*   `errors.py`: Centralized exception hierarchy.
+The system follows a modular **Strategy Pattern** architecture:
 
-### 2. AI (`ai/`)
-The brain.
-*   `ai_wrapper.py`: Connects to OpenRouter using `AsyncOpenAI`. Handles Function Calling. Supports Gemini, Mistral, GPT.
-*   `prompt_manager.py`: Stores the "Senior Quant" persona and Chain-of-Thought prompts.
+1.  **Data Layer (`engine/`)**:
+    -   `IBKRConnector`: Uses `ib_insync` for async communication with TWS/Gateway.
+    -   `CCXTConnector`: Uses `ccxt` to unify 100+ crypto exchanges.
+    -   `PortfolioManager`: Aggregates data from all active connectors into a single view.
+2.  **Analysis Layer (`ai/`)**:
+    -   `AIWrapper`: Standardizes communication with OpenRouter.
+    -   **Tool Use**: LLMs are forced to use structured tools (`buy_stock`, `sell_stock`, `hold_position`) to prevent hallucinations.
+3.  **Risk Layer (`engine/risk_manager.py`)**:
+    -   Validates every trade against `MAX_RISK_PER_TRADE_PCT` and `MAX_DAILY_LOSS_PCT`.
+4.  **Presentation Layer (`dashboard/`)**:
+    -   Streamlit-based UI for real-time monitoring and manual intervention.
 
-### 3. Dashboard (`dashboard/`)
-The eyes.
-*   `app.py`: A Streamlit web application. Supports "Unified Portfolio" view to aggregate net worth across exchanges. Secured by Login.
+---
+
+## 📂 Module Guide
+
+| File | Description |
+|------|-------------|
+| `main.py` | CLI Entry point for the autonomous loop. |
+| `config.py` | Pydantic-based configuration and validation. |
+| `dashboard/app.py` | The web interface. Connects to `PortfolioManager`. |
+| `engine/base_connector.py` | Abstract Interface for all exchanges. |
+| `engine/ib_connector.py` | IBKR implementation. |
+| `engine/ccxt_connector.py` | Unified Crypto implementation (Binance, Coinbase, Kraken, etc.). |
+| `engine/portfolio_manager.py`| Aggregates accounts and positions. |
+| `engine/risk_manager.py` | Safety checks (Stop Loss, Position Sizing). |
+| `ai/ai_wrapper.py` | Handles LLM prompting and JSON parsing. |
 
 ---
 
 ## ⚠️ Security & Risk Warning
 
-*   **Real Money:** Trading involves significant risk. This software is provided for educational purposes only.
-*   **Paper Trading:** ALWAYS start with IBKR Paper Trading or Crypto Testnets.
-*   **Stop Losses:** While the bot attempts to place Stop Losses, exchange outages or volatility can prevent execution.
-*   **API Keys:** Keep your `.env` file safe. Never commit it to GitHub.
+*   **Paper Trading First**: ALWAYS test on Paper Trading (IBKR) or Testnets (Binance) before using real money.
+*   **API Keys**: Never commit your `.env` file. It is in `.gitignore` by default.
+*   **Stop Losses**: The system attempts to place Stop Loss orders immediately after entry. However, exchange outages or API failures can prevent this. **Monitor your positions.**
+*   **AI Hallucinations**: While we use "Tool Calling" to minimize errors, LLMs can still behave unpredictably. The `RiskManager` is the final gatekeeper, but it is not infallible.
 
 ---
 
-## 🧪 Testing (The Loop)
+## 🧪 Testing
 
-To verify the system integrity, run the test suite:
+Run the full test suite to verify system integrity:
 ```bash
-python -m pytest
+pytest tests/
 ```
-This runs ~20 tests covering connection logic, AI reasoning (including Gemini format), risk management, and order execution mocks.
+Tests cover:
+-   API Connectivity (Mocked)
+-   Portfolio Aggregation
+-   AI Decision Parsing
+-   Stop Loss Logic
+
+---
+
+**Maintained by**: Senior Quantitative Architect
+**Last Update**: 2026-02-08

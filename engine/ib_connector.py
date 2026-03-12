@@ -15,6 +15,8 @@ class IBKRConnector(BaseConnector):
         self.ib = IB()
         self.connected = False
         self.logger = logging.getLogger(__name__)
+        self._historical_cache = {}
+        self._historical_cache_ttl = 300
 
     async def connect(self):
         if not self.ib.isConnected():
@@ -68,18 +70,31 @@ class IBKRConnector(BaseConnector):
                     self.ib.pendingTickersEvent -= on_update
             return ticker
 
-        # Task 2: History
-        async def get_history():
-            return await self.ib.reqHistoricalDataAsync(
-                contract,
-                endDateTime='',
-                durationStr='10 D',
-                barSizeSetting='1 hour',
-                whatToShow='TRADES',
-                useRTH=True
-            )
+        current_time = asyncio.get_event_loop().time()
+        cached_data = self._historical_cache.get(symbol)
 
-        ticker, bars = await asyncio.gather(get_snapshot(), get_history())
+        technicals = {}
+        if cached_data and (current_time - cached_data['time'] < self._historical_cache_ttl):
+            bars = None
+            technicals = cached_data['technicals']
+            get_history_coro = None
+        else:
+            # Task 2: History
+            async def get_history():
+                return await self.ib.reqHistoricalDataAsync(
+                    contract,
+                    endDateTime='',
+                    durationStr='10 D',
+                    barSizeSetting='1 hour',
+                    whatToShow='TRADES',
+                    useRTH=True
+                )
+            get_history_coro = get_history()
+
+        if get_history_coro:
+            ticker, bars = await asyncio.gather(get_snapshot(), get_history_coro)
+        else:
+            ticker = await get_snapshot()
 
         last_price = ticker.last if ticker.last else ticker.close
 
@@ -87,10 +102,13 @@ class IBKRConnector(BaseConnector):
              self.logger.warning(f"No market data received for {symbol}")
              return None
 
-        technicals = {}
         if bars:
             df = util.df(bars)
             technicals = Indicators.get_technical_summary(df)
+            self._historical_cache[symbol] = {
+                'time': current_time,
+                'technicals': technicals
+            }
 
         return MarketData(
             symbol=symbol,

@@ -19,6 +19,9 @@ class CCXTConnector(BaseConnector):
         self.connected = False
         self.exchange = None
 
+        self._historical_cache = {}
+        self._historical_cache_ttl = 300  # 5 minutes
+
         # Initialize Exchange
         try:
             exchange_class = getattr(ccxt, self.exchange_id)
@@ -65,20 +68,37 @@ class CCXTConnector(BaseConnector):
                 symbol = f"{symbol}/USDT"
 
         try:
+            # Check historical cache
+            current_time = asyncio.get_event_loop().time()
+            cached_data = self._historical_cache.get(symbol)
+
+            technicals = {}
+            if cached_data and (current_time - cached_data['time'] < self._historical_cache_ttl):
+                bars_task = None
+                technicals = cached_data['technicals']
+            else:
+                bars_task = self.exchange.fetch_ohlcv(symbol, '1h', limit=100)
+
             # Concurrent Fetch with error handling
             try:
                 ticker_task = self.exchange.fetch_ticker(symbol)
-                bars_task = self.exchange.fetch_ohlcv(symbol, '1h', limit=100)
-                ticker, bars = await asyncio.gather(ticker_task, bars_task)
+                if bars_task:
+                    ticker, bars = await asyncio.gather(ticker_task, bars_task)
+                else:
+                    ticker = await ticker_task
+                    bars = None
             except Exception as fetch_err:
                 self.logger.error(f"API fetch error for {symbol}: {fetch_err}")
                 return None
 
-            technicals = {}
             if bars:
                 df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
                 df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
                 technicals = Indicators.get_technical_summary(df)
+                self._historical_cache[symbol] = {
+                    'time': current_time,
+                    'technicals': technicals
+                }
 
             return MarketData(
                 symbol=symbol,

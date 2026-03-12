@@ -1,4 +1,4 @@
-import requests
+import aiohttp
 import logging
 import os
 import asyncio
@@ -35,9 +35,9 @@ class Notifier:
         }
 
         try:
-            # Run blocking I/O in a separate thread
-            response = await asyncio.to_thread(requests.post, self.webhook_url, json=payload)
-            response.raise_for_status()
-            self.logger.info(f"Notification sent for {symbol}")
+            async with aiohttp.ClientSession() as session:
+                async with session.post(self.webhook_url, json=payload) as response:
+                    response.raise_for_status()
+                    self.logger.info(f"Notification sent for {symbol}")
         except Exception as e:
             self.logger.error(f"Failed to send notification: {e}")

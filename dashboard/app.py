@@ -70,6 +70,12 @@ if 'connector' not in st.session_state:
     st.session_state.connector = None
 if 'logs' not in st.session_state:
     st.session_state.logs = []
+if 'ai_wrapper' not in st.session_state:
+    st.session_state.ai_wrapper = None
+if 'ai_model' not in st.session_state:
+    st.session_state.ai_model = None
+if 'ai_api_key' not in st.session_state:
+    st.session_state.ai_api_key = None
 
 def log(message):
     timestamp = datetime.now().strftime("%H:%M:%S")
@@ -249,7 +255,13 @@ else:
                             st.write(f"RSI: {inds.get('RSI', 'N/A')}")
                             st.write(f"MACD: {inds.get('MACD', 'N/A')}")
 
-                        ai = AIWrapper(api_key, model)
+                        # Reuse AIWrapper if same key/model to prevent AsyncOpenAI re-initialization
+                        if st.session_state.ai_wrapper is None or st.session_state.ai_model != model or st.session_state.ai_api_key != api_key:
+                            st.session_state.ai_wrapper = AIWrapper(api_key, model)
+                            st.session_state.ai_model = model
+                            st.session_state.ai_api_key = api_key
+
+                        ai = st.session_state.ai_wrapper
 
                         # Prepare dict for AI
                         md_dict = {

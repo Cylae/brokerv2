@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, SecretStr
 from typing import Optional, Literal
 
@@ -50,10 +50,11 @@ class Settings(BaseSettings):
     # NOTIFICATIONS
     DISCORD_WEBHOOK_URL: Optional[str] = None
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = 'utf-8'
-        extra = 'ignore'
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding='utf-8',
+        extra='ignore'
+    )
 
 # Global Instance
 try:

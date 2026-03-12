@@ -32,3 +32,31 @@ async def test_aggregation():
     assert len(positions) == 2
     assert positions[0].symbol == "AAPL"
     assert positions[1].symbol == "BTC/USDT"
+
+@pytest.mark.asyncio
+async def test_disconnect_all():
+    pm = PortfolioManager()
+    c1 = MagicMock()
+    c1.disconnect = AsyncMock()
+    pm.add_connector(c1)
+
+    await pm.disconnect_all()
+    c1.disconnect.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_get_aggregated_summary_empty():
+    pm = PortfolioManager()
+    summary = await pm.get_aggregated_summary()
+    assert summary.net_liquidation == 0.0
+
+@pytest.mark.asyncio
+async def test_get_all_positions_empty():
+    pm = PortfolioManager()
+    positions = await pm.get_all_positions()
+    assert positions == []
+
+@pytest.mark.asyncio
+async def test_no_connectors_connect_disconnect():
+    pm = PortfolioManager()
+    await pm.connect_all()
+    await pm.disconnect_all()

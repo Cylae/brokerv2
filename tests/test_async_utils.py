@@ -59,3 +59,20 @@ def test_get_or_create_event_loop_handles_closed():
     # Cleanup
     loop2.close()
     asyncio.set_event_loop(None)
+
+def test_get_or_create_event_loop_running_loop():
+    """
+    Test that it returns the running loop if there is one.
+    """
+    loop1 = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop1)
+
+    # We must start the loop and test from within it to get an active running loop
+    async def get_loop_from_inside():
+        return get_or_create_event_loop()
+
+    loop2 = loop1.run_until_complete(get_loop_from_inside())
+    assert loop1 is loop2
+
+    loop1.close()
+    asyncio.set_event_loop(None)

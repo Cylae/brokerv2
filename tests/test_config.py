@@ -23,8 +23,23 @@ def test_config_dashboard_auth():
 
 def test_config_missing_required():
     from config import Settings
-    if 'OPENROUTER_KEY' in os.environ:
-        del os.environ['OPENROUTER_KEY']
+    from unittest.mock import patch
 
-    with pytest.raises(ValidationError):
-        Settings()
+    with patch.dict('os.environ', {}, clear=True):
+        with pytest.raises(ValidationError):
+            Settings()
+
+def test_config_global_exception_handling():
+    import builtins
+    import importlib
+    import config
+    from unittest.mock import patch
+
+    # We want to force the `Config = Settings()` in config.py to fail and hit the except block.
+    # We can do this by temporarily removing the environment variable and re-importing the module.
+    with patch.dict('os.environ', {}, clear=True):
+        importlib.reload(config)
+        assert config.Config is None
+
+    # Restore configuration for other tests that might need it
+    importlib.reload(config)

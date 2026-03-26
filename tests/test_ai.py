@@ -54,3 +54,17 @@ async def test_ai_wrapper_no_tool_usage(mock_openai):
     decision = await ai.analyze_and_decide(market_data)
 
     assert decision['decision'] == 'hold_position'
+
+@pytest.mark.asyncio
+async def test_ai_wrapper_exception(mock_openai):
+    from ai.ai_wrapper import AIWrapper
+    ai = AIWrapper('fake_key', 'fake_model')
+    ai.client = mock_openai
+
+    mock_openai.chat.completions.create.side_effect = Exception("API error")
+
+    market_data = {'symbol': 'AAPL'}
+
+    decision = await ai.analyze_and_decide(market_data)
+
+    assert decision is None
